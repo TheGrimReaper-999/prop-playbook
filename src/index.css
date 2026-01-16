@@ -117,4 +117,63 @@
                 var(--gradient-accent) border-box;
     border: 2px solid transparent;
   }
+
+  /* Autocomplete Styles */
+  .autocomplete-dropdown {
+    @apply absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl overflow-hidden shadow-lg z-50;
+    box-shadow: var(--shadow-card);
+  }
+
+  .autocomplete-list {
+    @apply max-h-80 overflow-y-auto;
+  }
+
+  .autocomplete-item {
+    @apply flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200;
+  }
+
+  .autocomplete-item:hover,
+  .autocomplete-item.selected {
+    @apply bg-secondary/80;
+  }
+
+  .autocomplete-icon {
+    @apply flex items-center justify-center w-9 h-9 rounded-full bg-primary/20 text-primary;
+  }
+
+  .autocomplete-content {
+    @apply flex flex-col flex-1 min-w-0;
+  }
+
+  .autocomplete-name {
+    @apply text-foreground font-medium truncate;
+  }
+
+  .autocomplete-team {
+    @apply text-muted-foreground text-sm truncate;
+  }
+
+  .autocomplete-badge {
+    @apply text-xs font-medium px-2.5 py-1 rounded-full;
+  }
+
+  .autocomplete-badge.player {
+    @apply bg-primary/20 text-primary;
+  }
+
+  .autocomplete-badge.team {
+    @apply bg-accent/20 text-accent;
+  }
+
+  .autocomplete-loading {
+    @apply flex items-center gap-3 px-4 py-4 text-muted-foreground;
+  }
+
+  .loading-spinner {
+    @apply w-5 h-5 border-2 border-muted-foreground border-t-primary rounded-full animate-spin;
+  }
+
+  .autocomplete-empty {
+    @apply px-4 py-4 text-center text-muted-foreground;
+  }
 }
