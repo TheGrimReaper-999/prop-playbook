@@ -14,7 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      nba_players: {
+        Row: {
+          created_at: string
+          full_name: string
+          id: string
+          team_name: string
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          id?: string
+          team_name: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+          team_name?: string
+        }
+        Relationships: []
+      }
+      nba_teams: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          team_id: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          team_id?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          team_id?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
