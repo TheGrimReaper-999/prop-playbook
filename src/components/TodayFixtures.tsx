@@ -3,19 +3,30 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Calendar } from 'lucide-react';
 
+// Format UTC time from ISO string (e.g., "2025-01-23T00:30Z" -> "12:30 AM")
+const formatGameTime = (dateString: string): string => {
+  const date = new Date(dateString);
+  const hours = date.getUTCHours();
+  const minutes = date.getUTCMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const formattedHours = hours % 12 || 12;
+  const formattedMinutes = minutes.toString().padStart(2, '0');
+  return `${formattedHours}:${formattedMinutes} ${ampm} ET`;
+};
+
 const TodayFixtures = () => {
   const { data: games, isLoading, error } = useSchedule();
 
   if (isLoading) {
     return (
-      <div className="w-full max-w-4xl mx-auto mt-8">
+      <div className="w-full max-w-4xl mx-auto mt-8 px-4">
         <div className="flex items-center gap-2 mb-4 justify-center">
           <Calendar className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold">Today's Games</h2>
         </div>
-        <div className="flex gap-4 overflow-x-auto pb-4 px-2">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="min-w-[280px] h-24 rounded-lg flex-shrink-0" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-lg" />
           ))}
         </div>
       </div>
@@ -24,7 +35,7 @@ const TodayFixtures = () => {
 
   if (error || !games || games.length === 0) {
     return (
-      <div className="w-full max-w-4xl mx-auto mt-8">
+      <div className="w-full max-w-4xl mx-auto mt-8 px-4">
         <div className="flex items-center gap-2 mb-4 justify-center">
           <Calendar className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold">Today's Games</h2>
@@ -53,25 +64,25 @@ const TodayFixtures = () => {
         </span>
       );
     }
-    // Scheduled game - show local time
+    // Scheduled game - show UTC time
     return (
       <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary">
-        {game.localTime}
+        {formatGameTime(game.date)}
       </span>
     );
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto mt-8">
+    <div className="w-full max-w-4xl mx-auto mt-8 px-4">
       <div className="flex items-center gap-2 mb-4 justify-center">
         <Calendar className="w-5 h-5 text-primary" />
         <h2 className="text-lg font-semibold">Today's Games</h2>
       </div>
-      <div className="flex gap-4 overflow-x-auto pb-4 px-2 snap-x snap-mandatory">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {games.map((game: ScheduleGame) => (
           <Card 
             key={game.id} 
-            className="min-w-[280px] bg-card/50 border-border/30 hover:bg-card/80 transition-colors flex-shrink-0 snap-start"
+            className="bg-card/50 border-border/30 hover:bg-card/80 transition-colors"
           >
             <CardContent className="p-4">
               {/* Status */}
@@ -124,13 +135,6 @@ const TodayFixtures = () => {
                   )}
                 </div>
               </div>
-
-              {/* Venue for upcoming games */}
-              {game.status === 'pre' && game.venue && (
-                <p className="text-xs text-center text-muted-foreground mt-2 truncate">
-                  {game.venue}
-                </p>
-              )}
             </CardContent>
           </Card>
         ))}
