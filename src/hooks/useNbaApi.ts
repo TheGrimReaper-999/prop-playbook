@@ -37,23 +37,32 @@ export interface RapidApiPlayer {
 }
 
 export interface PlayerInfo {
-  playerId: string;
-  playerName: string;
-  playerSlug: string;
-  pos: string;
-  height: string;
-  weight: string;
-  birthDate: string;
-  age: string;
-  exp: string;
-  college: string;
-  country: string;
-  draftYear: string;
-  draftRound: string;
-  draftNumber: string;
-  jersey: string;
-  team: string;
-  teamId: string;
+  // Support multiple field naming conventions from API
+  id?: string;
+  playerId?: string;
+  playerName?: string;
+  fullName?: string;
+  firstName?: string;
+  lastName?: string;
+  playerSlug?: string;
+  pos?: string;
+  height?: string;
+  displayHeight?: string;
+  weight?: string;
+  displayWeight?: string;
+  birthDate?: string;
+  age?: string | number;
+  exp?: string;
+  college?: string;
+  country?: string;
+  draftYear?: string;
+  draftRound?: string;
+  draftNumber?: string;
+  jersey?: string;
+  team?: string;
+  teamId?: string;
+  // Support multiple image field names
+  image?: string;
   headShotUrl?: string;
   stats?: {
     ppg: string;
