@@ -15,6 +15,8 @@ const ENDPOINTS = {
   'player-info': '/nba-player-info',           // ?playerid=4869342
   'player-gamelog': '/nba-player-gamelog',     // ?playerid=4869342
   'player-splits': '/nba-player-splits',       // ?playerid=4869342
+  // Scoreboard
+  'scoreboard': '/nba-scoreboard',             // ?gameDate=20250118
   // Team division endpoints
   'teams-southwest': '/nba-southwest-team-list',
   'teams-pacific': '/nba-pacific-team-list',
@@ -31,7 +33,7 @@ serve(async (req) => {
   }
 
   try {
-    const { action, teamId, playerId } = await req.json();
+    const { action, teamId, playerId, gameDate } = await req.json();
     const apiKey = Deno.env.get('RAPIDAPI_NBA_KEY');
     
     if (!apiKey) {
@@ -57,6 +59,11 @@ serve(async (req) => {
       case 'player-splits':
         if (!playerId) throw new Error('playerId is required for player-splits');
         url = `${BASE_URL}${ENDPOINTS['player-splits']}?playerid=${playerId}`;
+        break;
+      case 'scoreboard':
+        // Format: YYYYMMDD - if no date provided, use today
+        const dateParam = gameDate || new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        url = `${BASE_URL}${ENDPOINTS['scoreboard']}?gameDate=${dateParam}`;
         break;
       // Team division endpoints
       case 'teams-southwest':
@@ -105,7 +112,7 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       default:
-        throw new Error(`Unknown action: ${action}. Available actions: player-list, player-info, player-gamelog, teams-southwest, teams-pacific, teams-northwest, teams-southeast, teams-atlantic, teams-central, all-teams`);
+        throw new Error(`Unknown action: ${action}. Available actions: player-list, player-info, player-gamelog, player-splits, scoreboard, teams-southwest, teams-pacific, teams-northwest, teams-southeast, teams-atlantic, teams-central, all-teams`);
     }
 
     console.log(`Fetching NBA data: action=${action}, url=${url}`);
