@@ -88,7 +88,7 @@ const StatsChart = ({ games, statType, mainLine, playerName }: StatsChartProps) 
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4">
-        <div className="h-64">
+        <div style={{ width: '100%', height: 256 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border/30" />
