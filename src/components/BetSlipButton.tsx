@@ -6,7 +6,11 @@ import { useBetSlip } from '@/contexts/BetSlipContext';
 import SearchBar from './SearchBar';
 import { SearchResult } from '@/hooks/useAutocomplete';
 
-const BetSlipButton = () => {
+interface BetSlipButtonProps {
+  showSearch?: boolean;
+}
+
+const BetSlipButton = ({ showSearch = true }: BetSlipButtonProps) => {
   const navigate = useNavigate();
   const { players } = useBetSlip();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -24,14 +28,16 @@ const BetSlipButton = () => {
     <>
       {/* Fixed buttons container */}
       <div className="fixed top-4 right-4 z-50 flex gap-2">
-        <Button
-          onClick={() => setIsSearchOpen(true)}
-          variant="outline"
-          size="lg"
-          className="shadow-lg bg-background/80 backdrop-blur-sm"
-        >
-          <Search className="w-5 h-5" />
-        </Button>
+        {showSearch && (
+          <Button
+            onClick={() => setIsSearchOpen(true)}
+            variant="outline"
+            size="lg"
+            className="shadow-lg bg-background/80 backdrop-blur-sm"
+          >
+            <Search className="w-5 h-5" />
+          </Button>
+        )}
         <Button
           onClick={() => navigate('/betslip')}
           className="gap-2 shadow-lg"
