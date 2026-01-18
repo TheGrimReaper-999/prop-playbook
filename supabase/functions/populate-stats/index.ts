@@ -1,0 +1,365 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const RAPIDAPI_HOST = 'nba-api-free-data.p.rapidapi.com';
+const BASE_URL = `https://${RAPIDAPI_HOST}`;
+
+interface Fixture {
+  event_id: string;
+  game_date: string;
+  home_team_id: string;
+  home_team_name: string;
+  home_team_abbrev: string;
+  home_team_logo: string | null;
+  home_team_score: number | null;
+  away_team_id: string;
+  away_team_name: string;
+  away_team_abbrev: string;
+  away_team_logo: string | null;
+  away_team_score: number | null;
+  status: string;
+  status_detail: string | null;
+  venue_name: string | null;
+  venue_city: string | null;
+  venue_state: string | null;
+  season: string | null;
+}
+
+interface PlayerStats {
+  player_id: string | null;
+  player_name: string;
+  event_id: string;
+  game_date: string;
+  minutes: number;
+  field_goals_made: number;
+  field_goals_attempted: number;
+  field_goal_pct: number;
+  three_pt_made: number;
+  three_pt_attempted: number;
+  three_pt_pct: number;
+  free_throws_made: number;
+  free_throws_attempted: number;
+  free_throw_pct: number;
+  rebounds: number;
+  assists: number;
+  blocks: number;
+  steals: number;
+  fouls: number;
+  turnovers: number;
+  points: number;
+}
+
+// Helper function to delay
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Parse game log stats array into PlayerStats object
+function parseGameStats(
+  eventId: string,
+  gameDate: string,
+  stats: string[],
+  playerName: string,
+  playerId: string | null
+): PlayerStats {
+  // Stats order from API:
+  // [0]=MIN, [1]=FGM-FGA, [2]=FG%, [3]=3PM-3PA, [4]=3P%, [5]=FTM-FTA, [6]=FT%,
+  // [7]=REB, [8]=AST, [9]=BLK, [10]=STL, [11]=PF, [12]=TO, [13]=PTS
+  
+  const fgSplit = (stats[1] || '0-0').split('-');
+  const fg3Split = (stats[3] || '0-0').split('-');
+  const ftSplit = (stats[5] || '0-0').split('-');
+
+  return {
+    player_id: playerId,
+    player_name: playerName,
+    event_id: eventId,
+    game_date: gameDate,
+    minutes: parseInt(stats[0] || '0', 10),
+    field_goals_made: parseInt(fgSplit[0] || '0', 10),
+    field_goals_attempted: parseInt(fgSplit[1] || '0', 10),
+    field_goal_pct: parseFloat(stats[2] || '0'),
+    three_pt_made: parseInt(fg3Split[0] || '0', 10),
+    three_pt_attempted: parseInt(fg3Split[1] || '0', 10),
+    three_pt_pct: parseFloat(stats[4] || '0'),
+    free_throws_made: parseInt(ftSplit[0] || '0', 10),
+    free_throws_attempted: parseInt(ftSplit[1] || '0', 10),
+    free_throw_pct: parseFloat(stats[6] || '0'),
+    rebounds: parseInt(stats[7] || '0', 10),
+    assists: parseInt(stats[8] || '0', 10),
+    blocks: parseInt(stats[9] || '0', 10),
+    steals: parseInt(stats[10] || '0', 10),
+    fouls: parseInt(stats[11] || '0', 10),
+    turnovers: parseInt(stats[12] || '0', 10),
+    points: parseInt(stats[13] || '0', 10),
+  };
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const apiKey = Deno.env.get('RAPIDAPI_NBA_KEY');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    if (!apiKey || !supabaseUrl || !supabaseKey) {
+      throw new Error('Missing required environment variables');
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    
+    const { action, playerId, playerName, dbPlayerId, startDate, endDate } = await req.json();
+
+    if (action === 'populate-fixtures') {
+      // Populate fixtures for a date range (defaults to last 30 days)
+      const end = endDate ? new Date(endDate) : new Date();
+      const start = startDate ? new Date(startDate) : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+      
+      const fixtures: Fixture[] = [];
+      const currentDate = new Date(start);
+      
+      console.log(`Fetching fixtures from ${start.toISOString()} to ${end.toISOString()}`);
+      
+      while (currentDate <= end) {
+        const dateStr = currentDate.toISOString().slice(0, 10).replace(/-/g, '');
+        
+        try {
+          const response = await fetch(`${BASE_URL}/nba-schedule-by-date?date=${dateStr}`, {
+            method: 'GET',
+            headers: {
+              'x-rapidapi-host': RAPIDAPI_HOST,
+              'x-rapidapi-key': apiKey,
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const events = data?.response?.Events || [];
+            
+            for (const event of events) {
+              const homeTeam = event.competitors?.find((c: any) => c.isHome);
+              const awayTeam = event.competitors?.find((c: any) => !c.isHome);
+              
+              if (homeTeam && awayTeam) {
+                fixtures.push({
+                  event_id: event.id,
+                  game_date: event.date,
+                  home_team_id: homeTeam.id,
+                  home_team_name: homeTeam.displayName,
+                  home_team_abbrev: homeTeam.abbrev,
+                  home_team_logo: homeTeam.logo,
+                  home_team_score: homeTeam.score ?? null,
+                  away_team_id: awayTeam.id,
+                  away_team_name: awayTeam.displayName,
+                  away_team_abbrev: awayTeam.abbrev,
+                  away_team_logo: awayTeam.logo,
+                  away_team_score: awayTeam.score ?? null,
+                  status: event.status?.state || 'scheduled',
+                  status_detail: event.status?.detail || null,
+                  venue_name: event.venue?.fullName || null,
+                  venue_city: event.venue?.address?.city || null,
+                  venue_state: event.venue?.address?.state || null,
+                  season: '2025-26',
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.error(`Error fetching fixtures for ${dateStr}:`, err);
+        }
+        
+        currentDate.setDate(currentDate.getDate() + 1);
+        await delay(100); // Rate limiting
+      }
+
+      // Upsert fixtures
+      if (fixtures.length > 0) {
+        const { error: upsertError } = await supabase
+          .from('nba_fixtures')
+          .upsert(fixtures, { onConflict: 'event_id' });
+
+        if (upsertError) throw upsertError;
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          fixturesCount: fixtures.length,
+          message: `Populated ${fixtures.length} fixtures` 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'populate-player-stats') {
+      // Populate stats for a specific player
+      if (!playerId) {
+        throw new Error('playerId is required for populate-player-stats');
+      }
+
+      console.log(`Fetching game log for player ${playerId}`);
+      
+      const response = await fetch(`${BASE_URL}/nba-player-gamelog?playerid=${playerId}`, {
+        method: 'GET',
+        headers: {
+          'x-rapidapi-host': RAPIDAPI_HOST,
+          'x-rapidapi-key': apiKey,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch game log: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const gamelog = data?.response?.gamelog;
+      
+      if (!gamelog?.events || !gamelog?.seasonTypes) {
+        return new Response(
+          JSON.stringify({ success: true, statsCount: 0, message: 'No game log data found' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const events = gamelog.events;
+      const seasonTypes = gamelog.seasonTypes || [];
+      
+      // Find regular season
+      const regularSeason = seasonTypes.find(
+        (season: { displayName: string }) => season.displayName?.includes('Regular Season')
+      );
+
+      if (!regularSeason?.categories) {
+        return new Response(
+          JSON.stringify({ success: true, statsCount: 0, message: 'No regular season data' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const allStats: PlayerStats[] = [];
+      const name = playerName || 'Unknown Player';
+
+      // Collect all game events
+      for (const category of regularSeason.categories) {
+        if (category.type === 'event' && category.events) {
+          for (const gameEvent of category.events) {
+            const eventId = gameEvent.eventId;
+            const eventData = events[eventId];
+            
+            if (eventData && gameEvent.stats) {
+              // First ensure the fixture exists
+              const fixture: Fixture = {
+                event_id: eventId,
+                game_date: eventData.gameDate,
+                home_team_id: eventData.homeTeamId || '',
+                home_team_name: eventData.homeTeamId === eventData.team?.id ? eventData.team?.displayName || '' : eventData.opponent?.displayName || '',
+                home_team_abbrev: eventData.homeTeamId === eventData.team?.id ? eventData.team?.abbreviation || '' : eventData.opponent?.abbreviation || '',
+                home_team_logo: eventData.homeTeamId === eventData.team?.id ? eventData.team?.logo : eventData.opponent?.logo,
+                home_team_score: eventData.homeTeamId === eventData.team?.id ? parseInt(eventData.homeTeamScore || '0', 10) : parseInt(eventData.awayTeamScore || '0', 10),
+                away_team_id: eventData.awayTeamId || '',
+                away_team_name: eventData.awayTeamId === eventData.team?.id ? eventData.team?.displayName || '' : eventData.opponent?.displayName || '',
+                away_team_abbrev: eventData.awayTeamId === eventData.team?.id ? eventData.team?.abbreviation || '' : eventData.opponent?.abbreviation || '',
+                away_team_logo: eventData.awayTeamId === eventData.team?.id ? eventData.team?.logo : eventData.opponent?.logo,
+                away_team_score: eventData.awayTeamId === eventData.team?.id ? parseInt(eventData.homeTeamScore || '0', 10) : parseInt(eventData.awayTeamScore || '0', 10),
+                status: 'post',
+                status_detail: eventData.score || null,
+                venue_name: null,
+                venue_city: null,
+                venue_state: null,
+                season: '2025-26',
+              };
+
+              // Upsert fixture
+              await supabase
+                .from('nba_fixtures')
+                .upsert(fixture, { onConflict: 'event_id' });
+
+              const stats = parseGameStats(
+                eventId,
+                eventData.gameDate,
+                gameEvent.stats,
+                name,
+                dbPlayerId || null
+              );
+              
+              allStats.push(stats);
+            }
+          }
+        }
+      }
+
+      // Upsert player stats
+      if (allStats.length > 0) {
+        // Delete existing stats for this player to avoid duplicates
+        if (dbPlayerId) {
+          await supabase
+            .from('nba_player_stats')
+            .delete()
+            .eq('player_id', dbPlayerId);
+        }
+
+        // Insert new stats
+        const { error: insertError } = await supabase
+          .from('nba_player_stats')
+          .insert(allStats);
+
+        if (insertError) {
+          console.error('Error inserting stats:', insertError);
+          throw insertError;
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          statsCount: allStats.length,
+          message: `Populated ${allStats.length} game stats for ${name}` 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'get-player-stats') {
+      // Get player stats from database
+      if (!dbPlayerId && !playerName) {
+        throw new Error('dbPlayerId or playerName is required');
+      }
+
+      let query = supabase
+        .from('nba_player_stats')
+        .select('*')
+        .order('game_date', { ascending: false })
+        .limit(10);
+
+      if (dbPlayerId) {
+        query = query.eq('player_id', dbPlayerId);
+      } else if (playerName) {
+        query = query.eq('player_name', playerName);
+      }
+
+      const { data: stats, error } = await query;
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, stats }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    throw new Error(`Unknown action: ${action}`);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error in populate-stats:', errorMessage);
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});

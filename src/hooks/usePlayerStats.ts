@@ -19,6 +19,59 @@ export interface StatValues {
   ra: number[];
 }
 
+export interface DbPlayerStats {
+  id: string;
+  player_id: string | null;
+  player_name: string;
+  event_id: string;
+  game_date: string;
+  minutes: number;
+  field_goals_made: number;
+  field_goals_attempted: number;
+  field_goal_pct: number;
+  three_pt_made: number;
+  three_pt_attempted: number;
+  three_pt_pct: number;
+  free_throws_made: number;
+  free_throws_attempted: number;
+  free_throw_pct: number;
+  rebounds: number;
+  assists: number;
+  blocks: number;
+  steals: number;
+  fouls: number;
+  turnovers: number;
+  points: number;
+  created_at: string;
+}
+
+// Convert database stats to GameLogEntry format
+export const dbStatsToGameLogEntry = (stat: DbPlayerStats): GameLogEntry => {
+  return {
+    gameId: stat.event_id,
+    gameDate: stat.game_date,
+    matchup: '',
+    opponent: '',
+    wl: '',
+    score: '',
+    min: stat.minutes.toString(),
+    pts: stat.points.toString(),
+    reb: stat.rebounds.toString(),
+    ast: stat.assists.toString(),
+    blk: stat.blocks.toString(),
+    stl: stat.steals.toString(),
+    fgm: stat.field_goals_made.toString(),
+    fga: stat.field_goals_attempted.toString(),
+    fgPct: stat.field_goal_pct.toString(),
+    fg3m: stat.three_pt_made.toString(),
+    fg3a: stat.three_pt_attempted.toString(),
+    fg3Pct: stat.three_pt_pct.toString(),
+    ftm: stat.free_throws_made.toString(),
+    fta: stat.free_throws_attempted.toString(),
+    ftPct: stat.free_throw_pct.toString(),
+  };
+};
+
 // Extract stat values from game log entries
 export const extractStatValues = (games: GameLogEntry[]): StatValues => {
   // Games come in most recent first order from API
@@ -62,7 +115,81 @@ export const getStatValuesForType = (
   return values.slice(0, n);
 };
 
-// Fetch player game log by API player ID
+// Fetch player stats from database
+export const fetchPlayerStatsFromDb = async (
+  dbPlayerId: string
+): Promise<GameLogEntry[]> => {
+  const { data: stats, error } = await supabase
+    .from('nba_player_stats')
+    .select('*')
+    .eq('player_id', dbPlayerId)
+    .order('game_date', { ascending: false })
+    .limit(10);
+
+  if (error) {
+    console.error('Error fetching stats from DB:', error);
+    return [];
+  }
+
+  if (stats && stats.length > 0) {
+    return stats.map((s: DbPlayerStats) => dbStatsToGameLogEntry(s));
+  }
+
+  return [];
+};
+
+// Populate player stats via edge function and return them
+export const populateAndFetchPlayerStats = async (
+  dbPlayerId: string,
+  playerName: string
+): Promise<GameLogEntry[]> => {
+  // First get the API player ID
+  const apiPlayerId = await getApiPlayerIdFromDb(dbPlayerId);
+  
+  if (!apiPlayerId) {
+    console.error('Could not find API player ID for:', playerName);
+    return [];
+  }
+
+  // Call edge function to populate stats
+  const { data, error } = await supabase.functions.invoke('populate-stats', {
+    body: {
+      action: 'populate-player-stats',
+      playerId: apiPlayerId,
+      playerName: playerName,
+      dbPlayerId: dbPlayerId,
+    },
+  });
+
+  if (error) {
+    console.error('Error populating stats:', error);
+    return [];
+  }
+
+  console.log('Populate stats result:', data);
+
+  // Now fetch the stats from database
+  return fetchPlayerStatsFromDb(dbPlayerId);
+};
+
+// Get player stats - first try DB, then populate if empty
+export const getPlayerStats = async (
+  dbPlayerId: string,
+  playerName: string
+): Promise<GameLogEntry[]> => {
+  // Try fetching from database first
+  let stats = await fetchPlayerStatsFromDb(dbPlayerId);
+  
+  if (stats.length === 0) {
+    // No stats in DB, need to populate
+    console.log(`No stats in DB for ${playerName}, populating...`);
+    stats = await populateAndFetchPlayerStats(dbPlayerId, playerName);
+  }
+
+  return stats;
+};
+
+// Fetch player game log by API player ID (fallback to API)
 export const fetchPlayerGameLog = async (
   apiPlayerId: string
 ): Promise<GameLogEntry[]> => {
@@ -153,9 +280,6 @@ export const getApiPlayerIdFromDb = async (
   if (error || !player) return null;
 
   // We need to find the API player ID by matching the name
-  // This is a limitation - we'd need to store the API ID in our database
-  // For now, we'll search through the team roster
-  
   // Get team info to find team ID
   const { data: team } = await supabase
     .from('nba_teams')
@@ -173,7 +297,7 @@ export const getApiPlayerIdFromDb = async (
   const playerList = playerListData?.response?.PlayerList || [];
   
   // Find matching player by name
-  const matchingPlayer = playerList.find((p: any) => {
+  const matchingPlayer = playerList.find((p: { fullName?: string; id?: string }) => {
     const apiName = (p.fullName || '').toLowerCase();
     const dbName = player.full_name.toLowerCase();
     return apiName === dbName || apiName.includes(dbName) || dbName.includes(apiName);
@@ -197,36 +321,23 @@ export const fetchStatsForLegs = async (
 ): Promise<Map<string, LegStats>> => {
   const statsMap = new Map<string, LegStats>();
 
-  // Process legs in parallel with a limit
+  // Process legs in parallel
   const results = await Promise.allSettled(
     legs.map(async (leg) => {
       try {
-        // Get API player ID
-        const apiPlayerId = await getApiPlayerIdFromDb(leg.player.id);
-        
-        if (!apiPlayerId) {
-          return {
-            legId: leg.legId,
-            playerId: leg.player.id,
-            apiPlayerId: null,
-            games: [],
-            statValues: extractStatValues([]),
-            error: 'Could not find API player ID',
-          };
-        }
-
-        // Fetch game log
-        const games = await fetchPlayerGameLog(apiPlayerId);
+        // Use the new database-first approach
+        const games = await getPlayerStats(leg.player.id, leg.player.name);
         const statValues = extractStatValues(games);
 
         return {
           legId: leg.legId,
           playerId: leg.player.id,
-          apiPlayerId,
+          apiPlayerId: null, // We don't need this anymore
           games,
           statValues,
         };
       } catch (err) {
+        console.error(`Error fetching stats for ${leg.player.name}:`, err);
         return {
           legId: leg.legId,
           playerId: leg.player.id,
