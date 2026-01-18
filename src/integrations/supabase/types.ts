@@ -16,18 +16,18 @@ export type Database = {
     Tables: {
       nba_fixtures: {
         Row: {
-          away_team_abbrev: string
-          away_team_id: string
+          away_team_abbrev: string | null
+          away_team_id: string | null
           away_team_logo: string | null
-          away_team_name: string
+          away_team_name: string | null
           away_team_score: number | null
           created_at: string
           event_id: string
           game_date: string
-          home_team_abbrev: string
-          home_team_id: string
+          home_team_abbrev: string | null
+          home_team_id: string | null
           home_team_logo: string | null
-          home_team_name: string
+          home_team_name: string | null
           home_team_score: number | null
           id: string
           season: string | null
@@ -39,18 +39,18 @@ export type Database = {
           venue_state: string | null
         }
         Insert: {
-          away_team_abbrev: string
-          away_team_id: string
+          away_team_abbrev?: string | null
+          away_team_id?: string | null
           away_team_logo?: string | null
-          away_team_name: string
+          away_team_name?: string | null
           away_team_score?: number | null
           created_at?: string
           event_id: string
           game_date: string
-          home_team_abbrev: string
-          home_team_id: string
+          home_team_abbrev?: string | null
+          home_team_id?: string | null
           home_team_logo?: string | null
-          home_team_name: string
+          home_team_name?: string | null
           home_team_score?: number | null
           id?: string
           season?: string | null
@@ -62,18 +62,18 @@ export type Database = {
           venue_state?: string | null
         }
         Update: {
-          away_team_abbrev?: string
-          away_team_id?: string
+          away_team_abbrev?: string | null
+          away_team_id?: string | null
           away_team_logo?: string | null
-          away_team_name?: string
+          away_team_name?: string | null
           away_team_score?: number | null
           created_at?: string
           event_id?: string
           game_date?: string
-          home_team_abbrev?: string
-          home_team_id?: string
+          home_team_abbrev?: string | null
+          home_team_id?: string | null
           home_team_logo?: string | null
-          home_team_name?: string
+          home_team_name?: string | null
           home_team_score?: number | null
           id?: string
           season?: string | null
