@@ -273,11 +273,16 @@ export const getApiPlayerIdFromDb = async (
   // First try to find the player in nba_players table
   const { data: player, error } = await supabase
     .from('nba_players')
-    .select('full_name, team_name')
+    .select('full_name, team_name, api_player_id')
     .eq('id', dbPlayerId)
     .single();
 
   if (error || !player) return null;
+
+  // If we already have the API player ID cached, use it
+  if (player.api_player_id) {
+    return player.api_player_id;
+  }
 
   // We need to find the API player ID by matching the name
   // Get team info to find team ID
@@ -285,7 +290,7 @@ export const getApiPlayerIdFromDb = async (
     .from('nba_teams')
     .select('team_id')
     .eq('name', player.team_name)
-    .single();
+    .maybeSingle();
 
   if (!team?.team_id) return null;
 
@@ -303,7 +308,17 @@ export const getApiPlayerIdFromDb = async (
     return apiName === dbName || apiName.includes(dbName) || dbName.includes(apiName);
   });
 
-  return matchingPlayer?.id || null;
+  const apiPlayerId = matchingPlayer?.id || null;
+
+  // Cache the API player ID for future use
+  if (apiPlayerId) {
+    await supabase
+      .from('nba_players')
+      .update({ api_player_id: apiPlayerId })
+      .eq('id', dbPlayerId);
+  }
+
+  return apiPlayerId;
 };
 
 // Fetch stats for multiple legs
