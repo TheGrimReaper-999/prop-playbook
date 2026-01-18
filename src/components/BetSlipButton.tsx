@@ -45,7 +45,7 @@ const BetSlipButton = ({ showSearch = true }: BetSlipButtonProps) => {
           size="lg"
         >
           <Layers className="w-5 h-5" />
-          Saved Bets
+          Parlays
           {parlays.length > 0 && (
             <span className="ml-1 bg-primary text-primary-foreground px-2 py-0.5 rounded-full text-sm font-bold">
               {parlays.length}

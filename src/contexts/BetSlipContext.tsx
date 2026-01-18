@@ -75,6 +75,7 @@ interface BetSlipContextType {
   parlays: SavedParlay[];
   saveParlay: (legs: ParlayLeg[], name?: string) => void;
   deleteParlay: (parlayId: string) => void;
+  renameParlay: (parlayId: string, newName: string) => void;
   clearParlays: () => void;
 }
 
@@ -218,6 +219,16 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, []);
 
+  const renameParlay = useCallback((parlayId: string, newName: string) => {
+    setParlays((prev) => {
+      const updated = prev.map((p) =>
+        p.id === parlayId ? { ...p, name: newName } : p
+      );
+      saveParlaysToStorage(updated);
+      return updated;
+    });
+  }, []);
+
   const clearParlays = useCallback(() => {
     setParlays([]);
     saveParlaysToStorage([]);
@@ -240,6 +251,7 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
         parlays,
         saveParlay,
         deleteParlay,
+        renameParlay,
         clearParlays,
       }}
     >

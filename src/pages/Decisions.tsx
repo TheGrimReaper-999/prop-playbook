@@ -4,6 +4,8 @@ import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt, Check, Layer
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useBetSlip, BetSlipLeg, ParlayLeg, LegStats } from '@/contexts/BetSlipContext';
 import { evaluateProp, BetDecisionResult } from '@/lib/betting-utils';
 import { toast } from '@/hooks/use-toast';
@@ -301,6 +303,10 @@ const Decisions = () => {
     setSelectedLegs(new Set(recommended));
   };
 
+const [showNamingDialog, setShowNamingDialog] = useState(false);
+  const [parlayName, setParlayName] = useState('');
+  const [pendingParlayLegs, setPendingParlayLegs] = useState<ParlayLeg[]>([]);
+
   const handleAddToParlay = () => {
     if (selectedLegs.size === 0) {
       toast({
@@ -323,13 +329,27 @@ const Decisions = () => {
       oddsUnder: d.leg.details.oddsUnder,
     }));
 
-    // Save the parlay
-    saveParlay(parlayLegs);
+    // Store legs and show naming dialog
+    setPendingParlayLegs(parlayLegs);
+    setParlayName(`Parlay ${new Date().toLocaleDateString()}`);
+    setShowNamingDialog(true);
+  };
+
+  const handleConfirmSaveParlay = () => {
+    if (pendingParlayLegs.length === 0) return;
+
+    // Save the parlay with the custom name
+    saveParlay(pendingParlayLegs, parlayName.trim() || undefined);
 
     toast({
       title: "Parlay Saved!",
-      description: `${selectedLegs.size} leg${selectedLegs.size !== 1 ? 's' : ''} saved to your parlays.`,
+      description: `${pendingParlayLegs.length} leg${pendingParlayLegs.length !== 1 ? 's' : ''} saved to your parlays.`,
     });
+
+    // Reset and close dialog
+    setShowNamingDialog(false);
+    setParlayName('');
+    setPendingParlayLegs([]);
 
     // Navigate to parlays page
     navigate('/parlays');
@@ -468,6 +488,32 @@ const Decisions = () => {
           </div>
         )}
       </div>
+
+      {/* Parlay Naming Dialog */}
+      <Dialog open={showNamingDialog} onOpenChange={setShowNamingDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Name Your Parlay</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              placeholder="Enter parlay name..."
+              value={parlayName}
+              onChange={(e) => setParlayName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleConfirmSaveParlay()}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNamingDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmSaveParlay}>
+              Save Parlay
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 };
