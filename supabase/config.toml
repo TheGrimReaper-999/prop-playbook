@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.populate-stats]
 verify_jwt = false
+
+[functions.bulk-populate]
+verify_jwt = false
