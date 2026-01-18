@@ -10,8 +10,8 @@ import TeamProfile from "./pages/TeamProfile";
 import BetSlip from "./pages/BetSlip";
 import Decisions from "./pages/Decisions";
 import Parlays from "./pages/Parlays";
+import ImportData from "./pages/ImportData";
 import NotFound from "./pages/NotFound";
-
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -29,6 +29,7 @@ const App = () => (
             <Route path="/betslip" element={<BetSlip />} />
             <Route path="/decisions" element={<Decisions />} />
             <Route path="/parlays" element={<Parlays />} />
+            <Route path="/import" element={<ImportData />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
