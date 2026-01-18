@@ -31,6 +31,24 @@ export interface BetSlipLeg {
   details: LegDetails;
 }
 
+export interface ParlayLeg {
+  legId: string;
+  player: BetSlipPlayer;
+  statType: string;
+  mainLine: string;
+  decision: 'TAKE OVER' | 'TAKE UNDER' | 'NO BET';
+  oddsFormat: string;
+  oddsOver: string;
+  oddsUnder: string;
+}
+
+export interface SavedParlay {
+  id: string;
+  name: string;
+  legs: ParlayLeg[];
+  createdAt: string;
+}
+
 interface BetSlipContextType {
   legs: BetSlipLeg[];
   addPlayer: (player: BetSlipPlayer) => void;
@@ -42,6 +60,11 @@ interface BetSlipContextType {
   // Legacy support for player-based operations
   players: BetSlipPlayer[];
   removePlayer: (id: string) => void;
+  // Parlay operations
+  parlays: SavedParlay[];
+  saveParlay: (legs: ParlayLeg[], name?: string) => void;
+  deleteParlay: (parlayId: string) => void;
+  clearParlays: () => void;
 }
 
 const defaultLegDetails: LegDetails = {
@@ -56,8 +79,28 @@ const defaultLegDetails: LegDetails = {
 
 const BetSlipContext = createContext<BetSlipContextType | undefined>(undefined);
 
+// Load parlays from localStorage
+const loadParlaysFromStorage = (): SavedParlay[] => {
+  try {
+    const stored = localStorage.getItem('savedParlays');
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+// Save parlays to localStorage
+const saveParlaysToStorage = (parlays: SavedParlay[]) => {
+  try {
+    localStorage.setItem('savedParlays', JSON.stringify(parlays));
+  } catch (e) {
+    console.error('Failed to save parlays to localStorage:', e);
+  }
+};
+
 export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [legs, setLegs] = useState<BetSlipLeg[]>([]);
+  const [parlays, setParlays] = useState<SavedParlay[]>(() => loadParlaysFromStorage());
 
   const addPlayer = useCallback((player: BetSlipPlayer) => {
     setLegs((prev) => {
@@ -138,6 +181,35 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLegs((prev) => prev.filter((leg) => leg.player.id !== id));
   }, []);
 
+  // Parlay operations
+  const saveParlay = useCallback((parlayLegs: ParlayLeg[], name?: string) => {
+    const newParlay: SavedParlay = {
+      id: crypto.randomUUID(),
+      name: name || `Parlay ${new Date().toLocaleDateString()}`,
+      legs: parlayLegs,
+      createdAt: new Date().toISOString(),
+    };
+    
+    setParlays((prev) => {
+      const updated = [newParlay, ...prev];
+      saveParlaysToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  const deleteParlay = useCallback((parlayId: string) => {
+    setParlays((prev) => {
+      const updated = prev.filter((p) => p.id !== parlayId);
+      saveParlaysToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  const clearParlays = useCallback(() => {
+    setParlays([]);
+    saveParlaysToStorage([]);
+  }, []);
+
   return (
     <BetSlipContext.Provider
       value={{
@@ -150,6 +222,10 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
         clearSlip,
         players,
         removePlayer,
+        parlays,
+        saveParlay,
+        deleteParlay,
+        clearParlays,
       }}
     >
       {children}

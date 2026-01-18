@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Receipt, Search, X } from 'lucide-react';
+import { Receipt, Search, X, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useBetSlip } from '@/contexts/BetSlipContext';
-import SearchBar from './SearchBar';
+import SearchBar from '@/components/SearchBar';
 import { SearchResult } from '@/hooks/useAutocomplete';
+import { useBetSlip } from '@/contexts/BetSlipContext';
 
 interface BetSlipButtonProps {
   showSearch?: boolean;
@@ -12,7 +12,7 @@ interface BetSlipButtonProps {
 
 const BetSlipButton = ({ showSearch = true }: BetSlipButtonProps) => {
   const navigate = useNavigate();
-  const { players } = useBetSlip();
+  const { legs, parlays } = useBetSlip();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   const handleSelect = (result: SearchResult) => {
@@ -39,15 +39,29 @@ const BetSlipButton = ({ showSearch = true }: BetSlipButtonProps) => {
           </Button>
         )}
         <Button
+          onClick={() => navigate('/parlays')}
+          variant="outline"
+          className="gap-2 shadow-lg bg-background/80 backdrop-blur-sm"
+          size="lg"
+        >
+          <Layers className="w-5 h-5" />
+          Saved Bets
+          {parlays.length > 0 && (
+            <span className="ml-1 bg-primary text-primary-foreground px-2 py-0.5 rounded-full text-sm font-bold">
+              {parlays.length}
+            </span>
+          )}
+        </Button>
+        <Button
           onClick={() => navigate('/betslip')}
           className="gap-2 shadow-lg"
           size="lg"
         >
           <Receipt className="w-5 h-5" />
           BetSlip
-          {players.length > 0 && (
+          {legs.length > 0 && (
             <span className="ml-1 bg-background text-primary px-2 py-0.5 rounded-full text-sm font-bold">
-              {players.length}
+              {legs.length}
             </span>
           )}
         </Button>
