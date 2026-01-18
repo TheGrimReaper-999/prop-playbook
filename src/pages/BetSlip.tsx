@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, User, Receipt, ChevronDown, ChevronUp, Plus, X, Check, Copy } from 'lucide-react';
+import { ArrowLeft, Trash2, User, Receipt, ChevronDown, ChevronUp, Plus, X, Check, Copy, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,8 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useBetSlip, AltLine } from '@/contexts/BetSlipContext';
+import { useBetSlip, AltLine, LegStats } from '@/contexts/BetSlipContext';
 import { toast } from '@/hooks/use-toast';
+import { fetchStatsForLegs, extractStatValues } from '@/hooks/usePlayerStats';
 
 const STAT_TYPES = [
   { value: 'pts', label: 'Points (PTS)' },
@@ -45,9 +46,10 @@ const COMBO_STATS = ['pra', 'pr', 'pa', 'ra'];
 
 const BetSlip = () => {
   const navigate = useNavigate();
-  const { legs, removeLeg, duplicateLeg, updateLegDetails, clearSlip } = useBetSlip();
+  const { legs, removeLeg, duplicateLeg, updateLegDetails, clearSlip, setLegStats } = useBetSlip();
   const [expandedLegs, setExpandedLegs] = useState<Set<string>>(new Set());
   const [saveStatus, setSaveStatus] = useState<Record<string, 'idle' | 'saving' | 'saved'>>({});
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   const toggleExpand = (legId: string) => {
     setExpandedLegs(prev => {
@@ -198,8 +200,69 @@ const BetSlip = () => {
     });
   };
 
-  const handleContinue = () => {
-    navigate('/decisions');
+  const handleContinue = async () => {
+    // Validate that all legs have stat types
+    const invalidLegs = legs.filter(leg => !leg.details.statType);
+    if (invalidLegs.length > 0) {
+      toast({
+        title: "Missing stat types",
+        description: "Please select a stat type for all legs before continuing.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoadingStats(true);
+    
+    try {
+      // Fetch stats for all legs
+      toast({
+        title: "Loading player stats",
+        description: "Fetching last 10 games for each player...",
+      });
+      
+      const statsMap = await fetchStatsForLegs(legs);
+      
+      // Convert to the format expected by context
+      const legStatsMap = new Map<string, LegStats>();
+      statsMap.forEach((stats, legId) => {
+        legStatsMap.set(legId, {
+          legId: stats.legId,
+          games: stats.games,
+          statValues: stats.statValues,
+          error: stats.error,
+        });
+      });
+      
+      setLegStats(legStatsMap);
+      
+      const successCount = Array.from(statsMap.values()).filter(s => s.games.length > 0).length;
+      
+      if (successCount === 0) {
+        toast({
+          title: "Could not fetch stats",
+          description: "Using placeholder data for analysis. Results may not be accurate.",
+          variant: "destructive",
+        });
+      } else if (successCount < legs.length) {
+        toast({
+          title: "Partial stats loaded",
+          description: `Loaded stats for ${successCount} of ${legs.length} players.`,
+        });
+      }
+      
+      navigate('/decisions');
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      toast({
+        title: "Error loading stats",
+        description: "Could not fetch player stats. Using placeholder data.",
+        variant: "destructive",
+      });
+      navigate('/decisions');
+    } finally {
+      setIsLoadingStats(false);
+    }
   };
 
   return (
@@ -567,8 +630,20 @@ const BetSlip = () => {
                   <span className="text-lg font-semibold">Total Legs</span>
                   <span className="text-2xl font-bold text-primary">{legs.length}</span>
                 </div>
-                <Button className="w-full" size="lg" onClick={handleContinue}>
-                  Continue with Selection
+                <Button 
+                  className="w-full" 
+                  size="lg" 
+                  onClick={handleContinue}
+                  disabled={isLoadingStats || legs.length === 0}
+                >
+                  {isLoadingStats ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Loading Stats...
+                    </>
+                  ) : (
+                    'Continue with Selection'
+                  )}
                 </Button>
               </CardContent>
             </Card>

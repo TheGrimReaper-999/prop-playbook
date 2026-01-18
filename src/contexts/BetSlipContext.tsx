@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { GameLogEntry } from '@/hooks/useNbaApi';
+import { StatValues } from '@/hooks/usePlayerStats';
 
 export interface BetSlipPlayer {
   id: string;
@@ -31,6 +33,13 @@ export interface BetSlipLeg {
   details: LegDetails;
 }
 
+export interface LegStats {
+  legId: string;
+  games: GameLogEntry[];
+  statValues: StatValues;
+  error?: string;
+}
+
 export interface ParlayLeg {
   legId: string;
   player: BetSlipPlayer;
@@ -51,10 +60,12 @@ export interface SavedParlay {
 
 interface BetSlipContextType {
   legs: BetSlipLeg[];
+  legStats: Map<string, LegStats>;
   addPlayer: (player: BetSlipPlayer) => void;
   removeLeg: (legId: string) => void;
   duplicateLeg: (legId: string) => void;
   updateLegDetails: (legId: string, details: Partial<LegDetails>) => void;
+  setLegStats: (stats: Map<string, LegStats>) => void;
   isPlayerInSlip: (id: string) => boolean;
   clearSlip: () => void;
   // Legacy support for player-based operations
@@ -100,6 +111,7 @@ const saveParlaysToStorage = (parlays: SavedParlay[]) => {
 
 export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [legs, setLegs] = useState<BetSlipLeg[]>([]);
+  const [legStats, setLegStats] = useState<Map<string, LegStats>>(new Map());
   const [parlays, setParlays] = useState<SavedParlay[]>(() => loadParlaysFromStorage());
 
   const addPlayer = useCallback((player: BetSlipPlayer) => {
@@ -163,6 +175,7 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const clearSlip = useCallback(() => {
     setLegs([]);
+    setLegStats(new Map());
   }, []);
 
   // Legacy support: get unique players from legs
@@ -214,10 +227,12 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
     <BetSlipContext.Provider
       value={{
         legs,
+        legStats,
         addPlayer,
         removeLeg,
         duplicateLeg,
         updateLegDetails,
+        setLegStats,
         isPlayerInSlip,
         clearSlip,
         players,
