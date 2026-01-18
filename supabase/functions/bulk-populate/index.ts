@@ -34,18 +34,20 @@ serve(async (req) => {
     try {
       console.log('Starting bulk population of fixtures and player stats...');
       
-      // 1. Populate fixtures for the 2025-26 season (Oct 2025 - Apr 2026)
-      // Current date: Jan 2026, so we go from Oct 22, 2025 to today
-      const seasonStart = new Date('2025-10-22');
+      // 2025-26 NBA Season: October 2025 - June 2026
+      const seasonStart = new Date('2025-10-01');
+      const seasonEnd = new Date('2026-06-30');
       const today = new Date();
+      // Only fetch up to today for completed games, or seasonEnd for scheduled
+      const endDate = seasonEnd < today ? seasonEnd : today;
       
-      console.log(`Fetching fixtures from ${seasonStart.toISOString()} to ${today.toISOString()}`);
+      console.log(`Fetching fixtures from ${seasonStart.toISOString()} to ${endDate.toISOString()}`);
       
       const fixtures: any[] = [];
       const currentDate = new Date(seasonStart);
       let fixturesProcessed = 0;
       
-      while (currentDate <= today) {
+      while (currentDate <= endDate) {
         const dateStr = currentDate.toISOString().slice(0, 10).replace(/-/g, '');
         
         try {
