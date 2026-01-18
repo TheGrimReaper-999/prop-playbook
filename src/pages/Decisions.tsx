@@ -1,10 +1,12 @@
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt, Check, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useBetSlip, BetSlipLeg } from '@/contexts/BetSlipContext';
 import { evaluateProp, BetDecisionResult } from '@/lib/betting-utils';
-import { useMemo } from 'react';
+import { toast } from '@/hooks/use-toast';
 
 const STAT_TYPE_LABELS: Record<string, string> = {
   pts: 'Points',
@@ -21,9 +23,11 @@ interface DecisionCardProps {
   leg: BetSlipLeg;
   result: BetDecisionResult;
   legNumber: number;
+  isSelected: boolean;
+  onToggleSelect: (legId: string) => void;
 }
 
-const DecisionCard = ({ leg, result, legNumber }: DecisionCardProps) => {
+const DecisionCard = ({ leg, result, legNumber, isSelected, onToggleSelect }: DecisionCardProps) => {
   const getDecisionColor = (decision: string) => {
     switch (decision) {
       case 'TAKE OVER':
@@ -35,14 +39,15 @@ const DecisionCard = ({ leg, result, legNumber }: DecisionCardProps) => {
     }
   };
 
-  const getDecisionBgColor = (decision: string) => {
+  const getDecisionBgColor = (decision: string, selected: boolean) => {
+    const base = selected ? 'ring-2 ring-primary ' : '';
     switch (decision) {
       case 'TAKE OVER':
-        return 'bg-green-500/10 border-green-500/30';
+        return base + 'bg-green-500/10 border-green-500/30';
       case 'TAKE UNDER':
-        return 'bg-red-500/10 border-red-500/30';
+        return base + 'bg-red-500/10 border-red-500/30';
       default:
-        return 'bg-muted/30 border-muted/50';
+        return base + 'bg-muted/30 border-muted/50';
     }
   };
 
@@ -61,11 +66,24 @@ const DecisionCard = ({ leg, result, legNumber }: DecisionCardProps) => {
   const mainLine = leg.details.mainLine || '-';
 
   return (
-    <Card className={`${getDecisionBgColor(result.decision)} transition-all`}>
+    <Card 
+      className={`${getDecisionBgColor(result.decision, isSelected)} transition-all cursor-pointer`}
+      onClick={() => onToggleSelect(leg.legId)}
+    >
       <CardContent className="p-6">
         <div className="flex items-start gap-4">
+          {/* Checkbox */}
+          <div className="flex-shrink-0 pt-1">
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => onToggleSelect(leg.legId)}
+              onClick={(e) => e.stopPropagation()}
+              className="h-5 w-5"
+            />
+          </div>
+
           {/* Decision Icon */}
-          <div className="flex-shrink-0 w-16 h-16 rounded-full bg-background/50 flex items-center justify-center">
+          <div className="flex-shrink-0 w-14 h-14 rounded-full bg-background/50 flex items-center justify-center">
             {getDecisionIcon(result.decision)}
           </div>
 
@@ -73,6 +91,12 @@ const DecisionCard = ({ leg, result, legNumber }: DecisionCardProps) => {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs text-muted-foreground font-medium">Leg #{legNumber}</span>
+              {isSelected && (
+                <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <Check className="w-3 h-3" />
+                  Selected
+                </span>
+              )}
             </div>
             
             <h3 className="font-bold text-lg truncate">{leg.player.name}</h3>
@@ -146,6 +170,7 @@ const DecisionCard = ({ leg, result, legNumber }: DecisionCardProps) => {
 const Decisions = () => {
   const navigate = useNavigate();
   const { legs } = useBetSlip();
+  const [selectedLegs, setSelectedLegs] = useState<Set<string>>(new Set());
 
   const decisions = useMemo(() => {
     return legs.map((leg) => {
@@ -171,6 +196,62 @@ const Decisions = () => {
     return { takeOver, takeUnder, noBet };
   }, [decisions]);
 
+  const toggleSelectLeg = (legId: string) => {
+    setSelectedLegs((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(legId)) {
+        newSet.delete(legId);
+      } else {
+        newSet.add(legId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAll = () => {
+    const allIds = new Set(legs.map((leg) => leg.legId));
+    setSelectedLegs(allIds);
+  };
+
+  const deselectAll = () => {
+    setSelectedLegs(new Set());
+  };
+
+  const selectRecommended = () => {
+    const recommended = decisions
+      .filter((d) => d.result.decision !== 'NO BET')
+      .map((d) => d.leg.legId);
+    setSelectedLegs(new Set(recommended));
+  };
+
+  const handleAddToParlay = () => {
+    if (selectedLegs.size === 0) {
+      toast({
+        title: "No legs selected",
+        description: "Please select at least one leg to add to parlay.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const selectedDecisions = decisions.filter((d) => selectedLegs.has(d.leg.legId));
+    const parlayLegs = selectedDecisions.map((d) => ({
+      legId: d.leg.legId,
+      player: d.leg.player,
+      statType: d.leg.details.statType,
+      mainLine: d.leg.details.mainLine,
+      decision: d.result.decision,
+    }));
+
+    // For now, just show a toast - parlay page can be added later
+    toast({
+      title: "Added to Parlay",
+      description: `${selectedLegs.size} leg${selectedLegs.size !== 1 ? 's' : ''} added to your parlay.`,
+    });
+
+    console.log('Parlay legs:', parlayLegs);
+  };
+
   return (
     <main className="min-h-screen bg-background">
       {/* Header */}
@@ -193,6 +274,11 @@ const Decisions = () => {
               <h1 className="text-4xl font-black tracking-tight">Decisions</h1>
               <p className="text-muted-foreground">
                 {legs.length} leg{legs.length !== 1 ? 's' : ''} analyzed
+                {selectedLegs.size > 0 && (
+                  <span className="ml-2 text-primary font-medium">
+                    • {selectedLegs.size} selected
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -240,6 +326,20 @@ const Decisions = () => {
               </CardContent>
             </Card>
 
+            {/* Selection Actions */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground mr-2">Quick select:</span>
+              <Button variant="outline" size="sm" onClick={selectAll}>
+                Select All
+              </Button>
+              <Button variant="outline" size="sm" onClick={deselectAll}>
+                Deselect All
+              </Button>
+              <Button variant="outline" size="sm" onClick={selectRecommended}>
+                Select Recommended
+              </Button>
+            </div>
+
             {/* Decision Cards */}
             <div className="space-y-4">
               {decisions.map(({ leg, result }, index) => (
@@ -248,16 +348,35 @@ const Decisions = () => {
                   leg={leg}
                   result={result}
                   legNumber={index + 1}
+                  isSelected={selectedLegs.has(leg.legId)}
+                  onToggleSelect={toggleSelectLeg}
                 />
               ))}
             </div>
 
-            {/* Action Button */}
+            {/* Action Buttons */}
             <Card className="bg-primary/10 border-primary/30">
               <CardContent className="p-6">
-                <Button className="w-full" size="lg" onClick={() => navigate('/betslip')}>
-                  Back to BetSlip
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button 
+                    variant="outline" 
+                    size="lg" 
+                    className="flex-1"
+                    onClick={() => navigate('/betslip')}
+                  >
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    Back to BetSlip
+                  </Button>
+                  <Button 
+                    size="lg" 
+                    className="flex-1"
+                    onClick={handleAddToParlay}
+                    disabled={selectedLegs.size === 0}
+                  >
+                    <Layers className="w-4 h-4 mr-2" />
+                    Add to Parlay ({selectedLegs.size})
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
