@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, User, Receipt, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Trash2, User, Receipt, ChevronDown, ChevronUp, Plus, X, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useBetSlip } from '@/contexts/BetSlipContext';
+import { toast } from '@/hooks/use-toast';
 
 const STAT_TYPES = [
   { value: 'pts', label: 'Points (PTS)' },
@@ -31,12 +32,20 @@ const ODDS_FORMATS = [
   { value: 'multiplier', label: 'Profit Multiplier' },
 ];
 
+interface AltLine {
+  id: string;
+  line: string;
+  odds: string;
+}
+
 interface PlayerBetDetails {
   statType: string;
   mainLine: string;
   oddsFormat: string;
   oddsOver: string;
   oddsUnder: string;
+  advancedMode: boolean;
+  altLines: AltLine[];
 }
 
 const BetSlip = () => {
@@ -44,6 +53,7 @@ const BetSlip = () => {
   const { players, removePlayer, clearSlip } = useBetSlip();
   const [expandedPlayers, setExpandedPlayers] = useState<Set<string>>(new Set());
   const [betDetails, setBetDetails] = useState<Record<string, PlayerBetDetails>>({});
+  const [saveStatus, setSaveStatus] = useState<Record<string, 'idle' | 'saving' | 'saved'>>({});
 
   const toggleExpand = (playerId: string) => {
     setExpandedPlayers(prev => {
@@ -57,24 +67,91 @@ const BetSlip = () => {
     });
   };
 
-  const updateBetDetail = (playerId: string, field: keyof PlayerBetDetails, value: string) => {
+  const savePlayerDetails = useCallback((playerId: string) => {
+    setSaveStatus(prev => ({ ...prev, [playerId]: 'saving' }));
+    // Simulate save - in real app this would save to database
+    setTimeout(() => {
+      setSaveStatus(prev => ({ ...prev, [playerId]: 'saved' }));
+      setTimeout(() => {
+        setSaveStatus(prev => ({ ...prev, [playerId]: 'idle' }));
+      }, 1500);
+    }, 300);
+  }, []);
+
+  const updateBetDetail = useCallback((playerId: string, field: keyof PlayerBetDetails, value: any) => {
     setBetDetails(prev => ({
       ...prev,
       [playerId]: {
-        ...prev[playerId],
+        ...getPlayerBetDetailsFromState(prev, playerId),
         [field]: value,
       },
     }));
-  };
+    // Auto-save on change
+    savePlayerDetails(playerId);
+  }, [savePlayerDetails]);
 
-  const getPlayerBetDetails = (playerId: string): PlayerBetDetails => {
-    return betDetails[playerId] || {
+  const getPlayerBetDetailsFromState = (state: Record<string, PlayerBetDetails>, playerId: string): PlayerBetDetails => {
+    return state[playerId] || {
       statType: '',
       mainLine: '',
       oddsFormat: 'american',
       oddsOver: '',
       oddsUnder: '',
+      advancedMode: false,
+      altLines: [],
     };
+  };
+
+  const getPlayerBetDetails = (playerId: string): PlayerBetDetails => {
+    return getPlayerBetDetailsFromState(betDetails, playerId);
+  };
+
+  const toggleAdvancedMode = (playerId: string) => {
+    const current = getPlayerBetDetails(playerId);
+    updateBetDetail(playerId, 'advancedMode', !current.advancedMode);
+  };
+
+  const addAltLine = (playerId: string) => {
+    const current = getPlayerBetDetails(playerId);
+    if (current.altLines.length >= 5) {
+      toast({
+        title: "Maximum lines reached",
+        description: "You can only add up to 5 alternate lines.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const newLine: AltLine = {
+      id: crypto.randomUUID(),
+      line: '',
+      odds: '',
+    };
+    updateBetDetail(playerId, 'altLines', [...current.altLines, newLine]);
+  };
+
+  const removeAltLine = (playerId: string, lineId: string) => {
+    const current = getPlayerBetDetails(playerId);
+    updateBetDetail(
+      playerId, 
+      'altLines', 
+      current.altLines.filter(l => l.id !== lineId)
+    );
+  };
+
+  const updateAltLine = (playerId: string, lineId: string, field: 'line' | 'odds', value: string) => {
+    const current = getPlayerBetDetails(playerId);
+    const updatedLines = current.altLines.map(l => 
+      l.id === lineId ? { ...l, [field]: value } : l
+    );
+    updateBetDetail(playerId, 'altLines', updatedLines);
+  };
+
+  const handleManualSave = (playerId: string) => {
+    savePlayerDetails(playerId);
+    toast({
+      title: "Saved",
+      description: "Player bet details saved successfully.",
+    });
   };
 
   return (
@@ -142,6 +219,7 @@ const BetSlip = () => {
               {players.map((player) => {
                 const isExpanded = expandedPlayers.has(player.id);
                 const details = getPlayerBetDetails(player.id);
+                const status = saveStatus[player.id] || 'idle';
 
                 return (
                   <Card 
@@ -172,6 +250,14 @@ const BetSlip = () => {
                           <h3 className="font-semibold truncate">{player.name}</h3>
                           <p className="text-sm text-muted-foreground truncate">{player.team}</p>
                         </div>
+
+                        {/* Auto-save indicator */}
+                        {status === 'saved' && (
+                          <span className="text-xs text-green-500 flex items-center gap-1">
+                            <Check className="w-3 h-3" />
+                            Saved
+                          </span>
+                        )}
 
                         <Button
                           variant="ghost"
@@ -281,19 +367,82 @@ const BetSlip = () => {
                             </div>
                           </div>
 
+                          {/* Advanced Mode - Alternate Lines */}
+                          {details.advancedMode && (
+                            <div className="space-y-3 pt-2 border-t border-border/30">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-sm font-medium">Alternate Lines</Label>
+                                {details.altLines.length < 5 && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => addAltLine(player.id)}
+                                    className="h-7 text-xs"
+                                  >
+                                    <Plus className="w-3 h-3 mr-1" />
+                                    Add Line
+                                  </Button>
+                                )}
+                              </div>
+                              
+                              {details.altLines.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                  No alternate lines added. Click "Add Line" to add up to 5 lines.
+                                </p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {details.altLines.map((altLine, index) => (
+                                    <div key={altLine.id} className="flex items-center gap-2">
+                                      <span className="text-xs text-muted-foreground w-6">#{index + 1}</span>
+                                      <div className="flex-1 grid grid-cols-2 gap-2">
+                                        <Input
+                                          type="number"
+                                          step="0.5"
+                                          placeholder="Line"
+                                          value={altLine.line}
+                                          onChange={(e) => updateAltLine(player.id, altLine.id, 'line', e.target.value)}
+                                          className="bg-background h-9"
+                                        />
+                                        <Input
+                                          type="text"
+                                          placeholder="Odds"
+                                          value={altLine.odds}
+                                          onChange={(e) => updateAltLine(player.id, altLine.id, 'odds', e.target.value)}
+                                          className="bg-background h-9"
+                                        />
+                                      </div>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => removeAltLine(player.id, altLine.id)}
+                                        className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {/* Action buttons */}
                           <div className="flex gap-3 pt-2">
                             <Button
-                              variant="outline"
+                              variant={details.advancedMode ? "default" : "outline"}
                               size="sm"
                               className="flex-1"
+                              onClick={() => toggleAdvancedMode(player.id)}
                             >
-                              Advanced Mode
+                              {details.advancedMode ? 'Basic Mode' : 'Advanced Mode'}
                             </Button>
                             <Button
                               size="sm"
+                              variant="outline"
                               className="flex-1"
+                              onClick={() => handleManualSave(player.id)}
                             >
+                              <Check className="w-4 h-4 mr-1" />
                               Save
                             </Button>
                           </div>
