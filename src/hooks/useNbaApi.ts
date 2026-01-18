@@ -441,6 +441,7 @@ export const useSchedule = (gameDate?: string) => {
         };
       });
     },
-    staleTime: 2 * 60 * 1000, // Refresh every 2 minutes
+    staleTime: 30 * 1000, // Data considered stale after 30 seconds
+    refetchInterval: 60 * 1000, // Auto-refresh every 60 seconds for live score updates
   });
 };

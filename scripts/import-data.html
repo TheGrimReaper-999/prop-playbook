@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Import NBA Data</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+    .section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+    button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+    #log { background: #f5f5f5; padding: 10px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+    .success { color: green; }
+    .error { color: red; }
+    .info { color: blue; }
+    input[type="file"] { margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>NBA Data Import Tool</h1>
+  
+  <div class="section">
+    <h2>1. Import Fixtures</h2>
+    <input type="file" id="fixturesFile" accept=".json" />
+    <button onclick="importFixtures()">Import Fixtures</button>
+  </div>
+  
+  <div class="section">
+    <h2>2. Import Player Stats</h2>
+    <input type="file" id="statsFile" accept=".json" />
+    <button onclick="importStats()">Import Player Stats</button>
+  </div>
+  
+  <div class="section">
+    <h2>Log</h2>
+    <div id="log"></div>
+    <button onclick="document.getElementById('log').innerHTML=''">Clear Log</button>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://mhekcxrveyijeelxavpe.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1oZWtjeHJ2ZXlpamVlbHhhdnBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1MjUzNTEsImV4cCI6MjA4NDEwMTM1MX0.B1bWKr5WkSf_unj7WjgRP_A9rm_A6brlq91bj8StanM';
+    
+    function log(message, type = 'info') {
+      const div = document.getElementById('log');
+      const time = new Date().toLocaleTimeString();
+      div.innerHTML += `<div class="${type}">[${time}] ${message}</div>`;
+      div.scrollTop = div.scrollHeight;
+    }
+    
+    async function sendBatch(type, data) {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/import-sqlite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({ type, data })
+      });
+      return response.json();
+    }
+    
+    async function importFixtures() {
+      const fileInput = document.getElementById('fixturesFile');
+      if (!fileInput.files.length) {
+        log('Please select a fixtures.json file', 'error');
+        return;
+      }
+      
+      log('Reading fixtures file...');
+      const file = fileInput.files[0];
+      const text = await file.text();
+      const data = JSON.parse(text);
+      
+      log(`Parsed ${data.length} fixtures. Importing in batches...`);
+      
+      const batchSize = 50;
+      let total = 0;
+      
+      for (let i = 0; i < data.length; i += batchSize) {
+        const batch = data.slice(i, i + batchSize);
+        try {
+          const result = await sendBatch('fixtures', batch);
+          if (result.error) {
+            log(`Error in batch ${i}: ${result.error}`, 'error');
+          } else {
+            total += result.inserted || batch.length;
+            log(`Batch ${Math.floor(i/batchSize) + 1}: Imported ${batch.length} fixtures (total: ${total})`);
+          }
+        } catch (err) {
+          log(`Error: ${err.message}`, 'error');
+        }
+      }
+      
+      log(`✅ Fixtures import complete! Total: ${total}`, 'success');
+    }
+    
+    async function importStats() {
+      const fileInput = document.getElementById('statsFile');
+      if (!fileInput.files.length) {
+        log('Please select a player_stats.json file', 'error');
+        return;
+      }
+      
+      log('Reading player stats file...');
+      const file = fileInput.files[0];
+      const text = await file.text();
+      const data = JSON.parse(text);
+      
+      log(`Parsed ${data.length} player stats. Importing in batches...`);
+      
+      const batchSize = 200;
+      let total = 0;
+      
+      for (let i = 0; i < data.length; i += batchSize) {
+        const batch = data.slice(i, i + batchSize);
+        try {
+          const result = await sendBatch('stats', batch);
+          if (result.error) {
+            log(`Error in batch ${i}: ${result.error}`, 'error');
+          } else {
+            total += result.inserted || batch.length;
+            log(`Batch ${Math.floor(i/batchSize) + 1}: Imported ${batch.length} stats (total: ${total})`);
+          }
+        } catch (err) {
+          log(`Error: ${err.message}`, 'error');
+        }
+      }
+      
+      log(`✅ Player stats import complete! Total: ${total}`, 'success');
+    }
+  </script>
+</body>
+</html>

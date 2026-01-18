@@ -108,7 +108,8 @@ const TodayFixtures = () => {
                   <p className={`text-sm font-bold ${game.awayTeam.winner ? 'text-primary' : ''}`}>
                     {game.awayTeam.abbreviation}
                   </p>
-                  {game.awayTeam.score !== undefined && (
+                  {/* Only show score if game has started (in progress or completed) */}
+                  {game.status !== 'pre' && game.awayTeam.score !== undefined && (
                     <p className={`text-xl font-black ${game.awayTeam.winner ? 'text-primary' : 'text-foreground'}`}>
                       {game.awayTeam.score}
                     </p>
@@ -132,7 +133,8 @@ const TodayFixtures = () => {
                   <p className={`text-sm font-bold ${game.homeTeam.winner ? 'text-primary' : ''}`}>
                     {game.homeTeam.abbreviation}
                   </p>
-                  {game.homeTeam.score !== undefined && (
+                  {/* Only show score if game has started (in progress or completed) */}
+                  {game.status !== 'pre' && game.homeTeam.score !== undefined && (
                     <p className={`text-xl font-black ${game.homeTeam.winner ? 'text-primary' : 'text-foreground'}`}>
                       {game.homeTeam.score}
                     </p>

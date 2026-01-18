@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { DB } from "https://deno.land/x/sqlite@v3.8/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,27 +19,45 @@ serve(async (req) => {
     const { type, data } = await req.json();
     
     if (type === "fixtures") {
-      // Expecting array of fixture objects
-      const fixtures = data.map((row: any) => ({
-        event_id: row.event_id || row.eventId,
-        game_date: row.game_date || row.gameDate,
-        status: row.status || 'scheduled',
-        status_detail: row.status_detail || row.statusDetail,
-        season: row.season,
-        home_team_id: row.home_team_id || row.homeTeamId,
-        home_team_name: row.home_team_name || row.homeTeamName,
-        home_team_abbrev: row.home_team_abbrev || row.homeTeamAbbrev,
-        home_team_logo: row.home_team_logo || row.homeTeamLogo,
-        home_team_score: row.home_team_score || row.homeTeamScore,
-        away_team_id: row.away_team_id || row.awayTeamId,
-        away_team_name: row.away_team_name || row.awayTeamName,
-        away_team_abbrev: row.away_team_abbrev || row.awayTeamAbbrev,
-        away_team_logo: row.away_team_logo || row.awayTeamLogo,
-        away_team_score: row.away_team_score || row.awayTeamScore,
-        venue_name: row.venue_name || row.venueName,
-        venue_city: row.venue_city || row.venueCity,
-        venue_state: row.venue_state || row.venueState,
-      }));
+      // Parse fixtures from the JSON format
+      const fixtures = data.map((row: any) => {
+        // Parse raw_fixture_data if present
+        let rawData: any = {};
+        if (row.raw_fixture_data) {
+          try {
+            rawData = JSON.parse(row.raw_fixture_data);
+          } catch (e) {
+            console.error("Error parsing raw_fixture_data:", e);
+          }
+        }
+        
+        // Extract competitors from raw data
+        const homeTeam = rawData.competitors?.find((c: any) => c.isHome === true) || {};
+        const awayTeam = rawData.competitors?.find((c: any) => c.isHome === false) || {};
+        
+        return {
+          event_id: row.fixture_id || row.event_id,
+          game_date: row.date || row.game_date,
+          status: row.status_state || row.status || 'scheduled',
+          status_detail: row.status_detail || rawData.status?.detail,
+          season: row.season || '2025-26',
+          home_team_id: homeTeam.id,
+          home_team_name: homeTeam.displayName || homeTeam.name,
+          home_team_abbrev: homeTeam.abbrev,
+          home_team_logo: homeTeam.logo,
+          home_team_score: homeTeam.score,
+          away_team_id: awayTeam.id,
+          away_team_name: awayTeam.displayName || awayTeam.name,
+          away_team_abbrev: awayTeam.abbrev,
+          away_team_logo: awayTeam.logo,
+          away_team_score: awayTeam.score,
+          venue_name: row.venue_fullName || rawData.venue?.fullName,
+          venue_city: row.venue_city || rawData.venue?.address?.city,
+          venue_state: row.venue_state || rawData.venue?.address?.state,
+        };
+      });
+
+      console.log(`Processing ${fixtures.length} fixtures`);
 
       // Batch upsert
       const batchSize = 100;
@@ -50,8 +67,12 @@ serve(async (req) => {
         const { error } = await supabase
           .from("nba_fixtures")
           .upsert(batch, { onConflict: "event_id" });
-        if (error) throw error;
+        if (error) {
+          console.error("Upsert error:", error);
+          throw error;
+        }
         inserted += batch.length;
+        console.log(`Inserted ${inserted}/${fixtures.length} fixtures`);
       }
 
       return new Response(
@@ -61,45 +82,52 @@ serve(async (req) => {
     }
 
     if (type === "stats") {
-      // Expecting array of stat objects
+      // Parse stats from the JSON format
       const stats = data.map((row: any) => ({
-        event_id: row.event_id || row.eventId,
-        game_date: row.game_date || row.gameDate,
-        player_id: row.player_id || row.playerId || null,
-        player_name: row.player_name || row.playerName,
-        minutes: row.minutes || row.min,
-        points: row.points || row.pts,
-        rebounds: row.rebounds || row.reb,
-        assists: row.assists || row.ast,
-        steals: row.steals || row.stl,
-        blocks: row.blocks || row.blk,
-        turnovers: row.turnovers || row.tov,
-        fouls: row.fouls || row.pf,
-        plus_minus: row.plus_minus || row.plusMinus,
-        field_goals_made: row.field_goals_made || row.fgm,
-        field_goals_attempted: row.field_goals_attempted || row.fga,
-        field_goal_pct: row.field_goal_pct || row.fgPct,
-        three_pt_made: row.three_pt_made || row.fg3m,
-        three_pt_attempted: row.three_pt_attempted || row.fg3a,
-        three_pt_pct: row.three_pt_pct || row.fg3Pct,
-        free_throws_made: row.free_throws_made || row.ftm,
-        free_throws_attempted: row.free_throws_attempted || row.fta,
-        free_throw_pct: row.free_throw_pct || row.ftPct,
+        event_id: row.game_id || row.event_id,
+        game_date: row.game_date,
+        player_id: row.player_id,
+        player_name: row.player_name || "Unknown",
+        minutes: row.minutes ? parseInt(row.minutes) : null,
+        points: row.points,
+        rebounds: row.rebounds,
+        assists: row.assists,
+        steals: row.steals,
+        blocks: row.blocks,
+        turnovers: row.turnovers,
+        fouls: row.fouls,
+        plus_minus: row.plus_minus,
+        field_goals_made: row.field_goals_made,
+        field_goals_attempted: row.field_goals_attempted,
+        field_goal_pct: row.field_goal_pct,
+        three_pt_made: row.three_point_made,
+        three_pt_attempted: row.three_point_attempted,
+        three_pt_pct: row.three_point_pct,
+        free_throws_made: row.free_throws_made,
+        free_throws_attempted: row.free_throws_attempted,
+        free_throw_pct: row.free_throw_pct,
       }));
 
-      // Batch insert
-      const batchSize = 100;
+      console.log(`Processing ${stats.length} player stats`);
+
+      // Batch insert (use upsert to avoid duplicates)
+      const batchSize = 500;
       let inserted = 0;
       for (let i = 0; i < stats.length; i += batchSize) {
         const batch = stats.slice(i, i + batchSize);
         const { error } = await supabase
           .from("nba_player_stats")
-          .insert(batch);
+          .upsert(batch, { 
+            onConflict: "player_id,event_id",
+          });
         if (error) {
           console.error("Insert error:", error);
           // Continue with next batch
         } else {
           inserted += batch.length;
+        }
+        if (i % 2000 === 0) {
+          console.log(`Processed ${i}/${stats.length} stats`);
         }
       }
 
