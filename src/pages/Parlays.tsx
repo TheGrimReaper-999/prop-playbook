@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useBetSlip, SavedParlay, ParlayLeg } from '@/contexts/BetSlipContext';
 import { toast } from '@/hooks/use-toast';
 import { useParlayStatus, ParlayStatus, LegStatus } from '@/hooks/useParlayStatus';
@@ -78,11 +81,12 @@ const getLegStatusIcon = (status: LegStatus) => {
 interface ParlayCardProps {
   parlay: SavedParlay;
   onDelete: (id: string) => void;
+  onRename: (id: string) => void;
   status?: ParlayStatus;
   legStatuses?: Map<string, LegStatus>;
 }
 
-const ParlayCard = ({ parlay, onDelete, status = 'pending', legStatuses }: ParlayCardProps) => {
+const ParlayCard = ({ parlay, onDelete, onRename, status = 'pending', legStatuses }: ParlayCardProps) => {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -98,7 +102,7 @@ const ParlayCard = ({ parlay, onDelete, status = 'pending', legStatuses }: Parla
     onDelete(parlay.id);
     toast({
       title: "Parlay deleted",
-      description: "The parlay has been removed from your saved bets.",
+      description: "The parlay has been removed.",
     });
   };
 
@@ -107,12 +111,16 @@ const ParlayCard = ({ parlay, onDelete, status = 'pending', legStatuses }: Parla
       <CardContent className="p-6">
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
-          <div>
+          <div className="flex items-center gap-2">
             <h3 className="font-bold text-lg">{parlay.name}</h3>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Calendar className="w-4 h-4" />
-              {formatDate(parlay.createdAt)}
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onRename(parlay.id)}
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            >
+              <Pencil className="w-4 h-4" />
+            </Button>
           </div>
           <div className="flex items-center gap-3">
             <span className="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm font-semibold">
@@ -128,6 +136,10 @@ const ParlayCard = ({ parlay, onDelete, status = 'pending', legStatuses }: Parla
               <Trash2 className="w-5 h-5" />
             </Button>
           </div>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+          <Calendar className="w-4 h-4" />
+          {formatDate(parlay.createdAt)}
         </div>
 
         {/* Legs */}
@@ -166,16 +178,42 @@ const ParlayCard = ({ parlay, onDelete, status = 'pending', legStatuses }: Parla
 
 const Parlays = () => {
   const navigate = useNavigate();
-  const { parlays, deleteParlay, clearParlays } = useBetSlip();
+  const { parlays, deleteParlay, renameParlay, clearParlays } = useBetSlip();
   const { data: parlayStatuses } = useParlayStatus(parlays);
+  
+  const [showRenameDialog, setShowRenameDialog] = useState(false);
+  const [renamingParlayId, setRenamingParlayId] = useState<string | null>(null);
+  const [newParlayName, setNewParlayName] = useState('');
 
   const handleClearAll = () => {
     if (parlays.length === 0) return;
     clearParlays();
     toast({
       title: "All parlays cleared",
-      description: "Your saved bets have been removed.",
+      description: "Your parlays have been removed.",
     });
+  };
+
+  const handleStartRename = (parlayId: string) => {
+    const parlay = parlays.find(p => p.id === parlayId);
+    if (parlay) {
+      setRenamingParlayId(parlayId);
+      setNewParlayName(parlay.name);
+      setShowRenameDialog(true);
+    }
+  };
+
+  const handleConfirmRename = () => {
+    if (renamingParlayId && newParlayName.trim()) {
+      renameParlay(renamingParlayId, newParlayName.trim());
+      toast({
+        title: "Parlay renamed",
+        description: "Your parlay has been renamed successfully.",
+      });
+    }
+    setShowRenameDialog(false);
+    setRenamingParlayId(null);
+    setNewParlayName('');
   };
 
   return (
@@ -197,9 +235,9 @@ const Parlays = () => {
               <Layers className="w-8 h-8 text-primary" />
             </div>
             <div>
-              <h1 className="text-4xl font-black tracking-tight">Saved Bets</h1>
+              <h1 className="text-4xl font-black tracking-tight">Parlays</h1>
               <p className="text-muted-foreground">
-                {parlays.length} parlay{parlays.length !== 1 ? 's' : ''} saved
+                {parlays.length} parlay{parlays.length !== 1 ? 's' : ''}
               </p>
             </div>
           </div>
@@ -214,7 +252,7 @@ const Parlays = () => {
               <div className="w-20 h-20 rounded-full bg-muted mx-auto mb-4 flex items-center justify-center">
                 <Layers className="w-10 h-10 text-muted-foreground" />
               </div>
-              <h2 className="text-xl font-semibold mb-2">No saved parlays</h2>
+              <h2 className="text-xl font-semibold mb-2">No parlays yet</h2>
               <p className="text-muted-foreground mb-6">
                 Add legs to your BetSlip and save them as parlays from the Decisions page
               </p>
@@ -248,6 +286,7 @@ const Parlays = () => {
                     key={parlay.id} 
                     parlay={parlay} 
                     onDelete={deleteParlay}
+                    onRename={handleStartRename}
                     status={result?.status}
                     legStatuses={legStatusMap}
                   />
@@ -266,6 +305,32 @@ const Parlays = () => {
           </div>
         )}
       </div>
+
+      {/* Rename Dialog */}
+      <Dialog open={showRenameDialog} onOpenChange={setShowRenameDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Rename Parlay</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              placeholder="Enter new name..."
+              value={newParlayName}
+              onChange={(e) => setNewParlayName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleConfirmRename()}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRenameDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmRename}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 };
