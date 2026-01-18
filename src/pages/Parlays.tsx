@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil } from 'lucide-react';
+import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -84,9 +84,10 @@ interface ParlayCardProps {
   onRename: (id: string) => void;
   status?: ParlayStatus;
   legStatuses?: Map<string, LegStatus>;
+  isDeleting?: boolean;
 }
 
-const ParlayCard = ({ parlay, onDelete, onRename, status = 'pending', legStatuses }: ParlayCardProps) => {
+const ParlayCard = ({ parlay, onDelete, onRename, status = 'pending', legStatuses, isDeleting }: ParlayCardProps) => {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -95,14 +96,6 @@ const ParlayCard = ({ parlay, onDelete, onRename, status = 'pending', legStatuse
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-    });
-  };
-
-  const handleDelete = () => {
-    onDelete(parlay.id);
-    toast({
-      title: "Parlay deleted",
-      description: "The parlay has been removed.",
     });
   };
 
@@ -130,10 +123,15 @@ const ParlayCard = ({ parlay, onDelete, onRename, status = 'pending', legStatuse
             <Button
               variant="ghost"
               size="icon"
-              onClick={handleDelete}
+              onClick={() => onDelete(parlay.id)}
+              disabled={isDeleting}
               className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
             >
-              <Trash2 className="w-5 h-5" />
+              {isDeleting ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Trash2 className="w-5 h-5" />
+              )}
             </Button>
           </div>
         </div>
@@ -178,12 +176,14 @@ const ParlayCard = ({ parlay, onDelete, onRename, status = 'pending', legStatuse
 
 const Parlays = () => {
   const navigate = useNavigate();
-  const { parlays, deleteParlay, renameParlay, clearParlays } = useBetSlip();
+  const { parlays, parlaysLoading, deleteParlay, renameParlay, clearParlays } = useBetSlip();
   const { data: parlayStatuses } = useParlayStatus(parlays);
   
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [renamingParlayId, setRenamingParlayId] = useState<string | null>(null);
   const [newParlayName, setNewParlayName] = useState('');
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [isRenaming, setIsRenaming] = useState(false);
 
   const handleClearAll = () => {
     if (parlays.length === 0) return;
@@ -192,6 +192,25 @@ const Parlays = () => {
       title: "All parlays cleared",
       description: "Your parlays have been removed.",
     });
+  };
+
+  const handleDelete = async (parlayId: string) => {
+    setIsDeleting(parlayId);
+    try {
+      await deleteParlay(parlayId);
+      toast({
+        title: "Parlay deleted",
+        description: "The parlay has been removed.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete parlay. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(null);
+    }
   };
 
   const handleStartRename = (parlayId: string) => {
@@ -203,13 +222,24 @@ const Parlays = () => {
     }
   };
 
-  const handleConfirmRename = () => {
+  const handleConfirmRename = async () => {
     if (renamingParlayId && newParlayName.trim()) {
-      renameParlay(renamingParlayId, newParlayName.trim());
-      toast({
-        title: "Parlay renamed",
-        description: "Your parlay has been renamed successfully.",
-      });
+      setIsRenaming(true);
+      try {
+        await renameParlay(renamingParlayId, newParlayName.trim());
+        toast({
+          title: "Parlay renamed",
+          description: "Your parlay has been renamed successfully.",
+        });
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to rename parlay. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsRenaming(false);
+      }
     }
     setShowRenameDialog(false);
     setRenamingParlayId(null);
@@ -246,7 +276,17 @@ const Parlays = () => {
 
       {/* Content */}
       <div className="max-w-4xl mx-auto p-6">
-        {parlays.length === 0 ? (
+        {parlaysLoading ? (
+          <Card className="bg-card/50 border-border/50">
+            <CardContent className="p-12 text-center">
+              <Loader2 className="w-10 h-10 text-primary mx-auto mb-4 animate-spin" />
+              <h2 className="text-xl font-semibold mb-2">Loading parlays...</h2>
+              <p className="text-muted-foreground">
+                Fetching your saved parlays
+              </p>
+            </CardContent>
+          </Card>
+        ) : parlays.length === 0 ? (
           <Card className="bg-card/50 border-border/50">
             <CardContent className="p-12 text-center">
               <div className="w-20 h-20 rounded-full bg-muted mx-auto mb-4 flex items-center justify-center">
@@ -285,10 +325,11 @@ const Parlays = () => {
                   <ParlayCard 
                     key={parlay.id} 
                     parlay={parlay} 
-                    onDelete={deleteParlay}
+                    onDelete={handleDelete}
                     onRename={handleStartRename}
                     status={result?.status}
                     legStatuses={legStatusMap}
+                    isDeleting={isDeleting === parlay.id}
                   />
                 );
               })}
@@ -322,11 +363,18 @@ const Parlays = () => {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRenameDialog(false)}>
+            <Button variant="outline" onClick={() => setShowRenameDialog(false)} disabled={isRenaming}>
               Cancel
             </Button>
-            <Button onClick={handleConfirmRename}>
-              Save
+            <Button onClick={handleConfirmRename} disabled={isRenaming}>
+              {isRenaming ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

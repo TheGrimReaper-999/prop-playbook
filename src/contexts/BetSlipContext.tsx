@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { GameLogEntry } from '@/hooks/useNbaApi';
 import { StatValues } from '@/hooks/usePlayerStats';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface BetSlipPlayer {
   id: string;
@@ -73,10 +74,12 @@ interface BetSlipContextType {
   removePlayer: (id: string) => void;
   // Parlay operations
   parlays: SavedParlay[];
-  saveParlay: (legs: ParlayLeg[], name?: string) => void;
-  deleteParlay: (parlayId: string) => void;
-  renameParlay: (parlayId: string, newName: string) => void;
+  parlaysLoading: boolean;
+  saveParlay: (legs: ParlayLeg[], name?: string) => Promise<void>;
+  deleteParlay: (parlayId: string) => Promise<void>;
+  renameParlay: (parlayId: string, newName: string) => Promise<void>;
   clearParlays: () => void;
+  refreshParlays: () => Promise<void>;
 }
 
 const defaultLegDetails: LegDetails = {
@@ -91,29 +94,49 @@ const defaultLegDetails: LegDetails = {
 
 const BetSlipContext = createContext<BetSlipContextType | undefined>(undefined);
 
-// Load parlays from localStorage
-const loadParlaysFromStorage = (): SavedParlay[] => {
-  try {
-    const stored = localStorage.getItem('savedParlays');
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-};
-
-// Save parlays to localStorage
-const saveParlaysToStorage = (parlays: SavedParlay[]) => {
-  try {
-    localStorage.setItem('savedParlays', JSON.stringify(parlays));
-  } catch (e) {
-    console.error('Failed to save parlays to localStorage:', e);
-  }
-};
-
 export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [legs, setLegs] = useState<BetSlipLeg[]>([]);
   const [legStats, setLegStats] = useState<Map<string, LegStats>>(new Map());
-  const [parlays, setParlays] = useState<SavedParlay[]>(() => loadParlaysFromStorage());
+  const [parlays, setParlays] = useState<SavedParlay[]>([]);
+  const [parlaysLoading, setParlaysLoading] = useState(true);
+
+  // Fetch parlays from database on mount
+  const fetchParlays = useCallback(async () => {
+    try {
+      setParlaysLoading(true);
+      const { data, error } = await supabase.functions.invoke('parlays', {
+        method: 'GET',
+      });
+
+      if (error) {
+        console.error('Error fetching parlays:', error);
+        return;
+      }
+
+      // Transform database format to app format
+      const transformedParlays: SavedParlay[] = (data || []).map((p: {
+        id: string;
+        name: string;
+        legs: ParlayLeg[];
+        created_at: string;
+      }) => ({
+        id: p.id,
+        name: p.name,
+        legs: p.legs as ParlayLeg[],
+        createdAt: p.created_at,
+      }));
+
+      setParlays(transformedParlays);
+    } catch (err) {
+      console.error('Error fetching parlays:', err);
+    } finally {
+      setParlaysLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchParlays();
+  }, [fetchParlays]);
 
   const addPlayer = useCallback((player: BetSlipPlayer) => {
     setLegs((prev) => {
@@ -195,43 +218,79 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setLegs((prev) => prev.filter((leg) => leg.player.id !== id));
   }, []);
 
-  // Parlay operations
-  const saveParlay = useCallback((parlayLegs: ParlayLeg[], name?: string) => {
-    const newParlay: SavedParlay = {
-      id: crypto.randomUUID(),
-      name: name || `Parlay ${new Date().toLocaleDateString()}`,
-      legs: parlayLegs,
-      createdAt: new Date().toISOString(),
-    };
-    
-    setParlays((prev) => {
-      const updated = [newParlay, ...prev];
-      saveParlaysToStorage(updated);
-      return updated;
-    });
+  // Parlay operations - now using database
+  const saveParlay = useCallback(async (parlayLegs: ParlayLeg[], name?: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('parlays', {
+        method: 'POST',
+        body: {
+          name: name || `Parlay ${new Date().toLocaleDateString()}`,
+          legs: parlayLegs,
+        },
+      });
+
+      if (error) {
+        console.error('Error saving parlay:', error);
+        throw error;
+      }
+
+      // Add to local state
+      const newParlay: SavedParlay = {
+        id: data.id,
+        name: data.name,
+        legs: data.legs as ParlayLeg[],
+        createdAt: data.created_at,
+      };
+
+      setParlays((prev) => [newParlay, ...prev]);
+    } catch (err) {
+      console.error('Error saving parlay:', err);
+      throw err;
+    }
   }, []);
 
-  const deleteParlay = useCallback((parlayId: string) => {
-    setParlays((prev) => {
-      const updated = prev.filter((p) => p.id !== parlayId);
-      saveParlaysToStorage(updated);
-      return updated;
-    });
+  const deleteParlay = useCallback(async (parlayId: string) => {
+    try {
+      const { error } = await supabase.functions.invoke('parlays', {
+        method: 'DELETE',
+        body: { id: parlayId },
+      });
+
+      if (error) {
+        console.error('Error deleting parlay:', error);
+        throw error;
+      }
+
+      setParlays((prev) => prev.filter((p) => p.id !== parlayId));
+    } catch (err) {
+      console.error('Error deleting parlay:', err);
+      throw err;
+    }
   }, []);
 
-  const renameParlay = useCallback((parlayId: string, newName: string) => {
-    setParlays((prev) => {
-      const updated = prev.map((p) =>
-        p.id === parlayId ? { ...p, name: newName } : p
+  const renameParlay = useCallback(async (parlayId: string, newName: string) => {
+    try {
+      const { error } = await supabase.functions.invoke('parlays', {
+        method: 'PUT',
+        body: { id: parlayId, name: newName },
+      });
+
+      if (error) {
+        console.error('Error renaming parlay:', error);
+        throw error;
+      }
+
+      setParlays((prev) =>
+        prev.map((p) => (p.id === parlayId ? { ...p, name: newName } : p))
       );
-      saveParlaysToStorage(updated);
-      return updated;
-    });
+    } catch (err) {
+      console.error('Error renaming parlay:', err);
+      throw err;
+    }
   }, []);
 
   const clearParlays = useCallback(() => {
     setParlays([]);
-    saveParlaysToStorage([]);
   }, []);
 
   return (
@@ -249,10 +308,12 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
         players,
         removePlayer,
         parlays,
+        parlaysLoading,
         saveParlay,
         deleteParlay,
         renameParlay,
         clearParlays,
+        refreshParlays: fetchParlays,
       }}
     >
       {children}
