@@ -183,3 +183,19 @@ export const useTeamsByDivision = (division: 'southwest' | 'pacific' | 'northwes
     staleTime: 10 * 60 * 1000,
   });
 };
+
+// Find team info from all divisions by team name
+export const useTeamInfoByName = (teamName: string | null) => {
+  const { data: allTeams, isLoading } = useAllNbaTeams();
+  
+  const teamInfo = allTeams?.reduce<RapidApiTeam | null>((found, division) => {
+    if (found) return found;
+    const match = division.teams?.find((t: RapidApiTeam) => 
+      t.teamName?.toLowerCase().includes(teamName?.toLowerCase() || '') ||
+      teamName?.toLowerCase().includes(t.teamName?.toLowerCase() || '')
+    );
+    return match || null;
+  }, null);
+  
+  return { data: teamInfo, isLoading };
+};
