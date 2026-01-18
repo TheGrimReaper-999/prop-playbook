@@ -137,8 +137,20 @@
     @apply bg-secondary/80;
   }
 
-  .autocomplete-icon {
-    @apply flex items-center justify-center w-9 h-9 rounded-full bg-primary/20 text-primary;
+  .autocomplete-avatar {
+    @apply flex items-center justify-center w-10 h-10 rounded-full bg-primary/20 overflow-hidden;
+  }
+
+  .avatar-image {
+    @apply w-full h-full object-cover;
+  }
+
+  .avatar-fallback {
+    @apply flex items-center justify-center w-full h-full text-primary;
+  }
+
+  .avatar-fallback.hidden {
+    display: none;
   }
 
   .autocomplete-content {

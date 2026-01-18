@@ -106,12 +106,25 @@ const SearchBar = ({ onSearch, onSelect }: SearchBarProps) => {
                   onClick={() => handleSelect(result)}
                   onMouseEnter={() => setSelectedIndex(index)}
                 >
-                  <div className="autocomplete-icon">
-                    {result.type === 'player' ? (
-                      <User size={18} />
-                    ) : (
-                      <Users size={18} />
-                    )}
+                  <div className="autocomplete-avatar">
+                    {result.imageUrl ? (
+                      <img 
+                        src={result.imageUrl} 
+                        alt={result.name}
+                        className="avatar-image"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className={`avatar-fallback ${result.imageUrl ? 'hidden' : ''}`}>
+                      {result.type === 'player' ? (
+                        <User size={18} />
+                      ) : (
+                        <Users size={18} />
+                      )}
+                    </div>
                   </div>
                   <div className="autocomplete-content">
                     <span className="autocomplete-name">{result.name}</span>

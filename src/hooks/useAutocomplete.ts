@@ -7,6 +7,7 @@ export interface SearchResult {
   name: string;
   type: 'player' | 'team';
   teamName?: string;
+  imageUrl?: string;
 }
 
 export const useAutocomplete = (query: string) => {
@@ -29,12 +30,12 @@ export const useAutocomplete = (query: string) => {
         const [playersResponse, teamsResponse] = await Promise.all([
           supabase
             .from('nba_players')
-            .select('id, full_name, team_name')
+            .select('id, full_name, team_name, image_url')
             .ilike('full_name', searchTerm)
             .limit(5),
           supabase
             .from('nba_teams')
-            .select('id, name')
+            .select('id, name, logo_url')
             .ilike('name', searchTerm)
             .limit(3),
         ]);
@@ -44,12 +45,14 @@ export const useAutocomplete = (query: string) => {
           name: p.full_name,
           type: 'player' as const,
           teamName: p.team_name,
+          imageUrl: p.image_url ?? undefined,
         }));
 
         const teams: SearchResult[] = (teamsResponse.data || []).map((t) => ({
           id: t.id,
           name: t.name,
           type: 'team' as const,
+          imageUrl: t.logo_url ?? undefined,
         }));
 
         setResults([...players, ...teams]);
