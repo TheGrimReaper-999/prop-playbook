@@ -19,18 +19,21 @@ export type Database = {
           created_at: string
           full_name: string
           id: string
+          image_url: string | null
           team_name: string
         }
         Insert: {
           created_at?: string
           full_name: string
           id?: string
+          image_url?: string | null
           team_name: string
         }
         Update: {
           created_at?: string
           full_name?: string
           id?: string
+          image_url?: string | null
           team_name?: string
         }
         Relationships: []
@@ -39,18 +42,21 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          logo_url: string | null
           name: string
           team_id: number | null
         }
         Insert: {
           created_at?: string
           id?: string
+          logo_url?: string | null
           name: string
           team_id?: number | null
         }
         Update: {
           created_at?: string
           id?: string
+          logo_url?: string | null
           name?: string
           team_id?: number | null
         }
