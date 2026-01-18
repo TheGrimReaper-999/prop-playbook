@@ -62,9 +62,14 @@ const TeamProfile = () => {
   }
 
   // Use API logo if available, otherwise fall back to DB logo
-  const teamLogo = apiTeamInfo?.teamLogo || team.logo_url;
-  const conference = apiTeamInfo?.conference || 'NBA';
-  const division = apiTeamInfo?.division || 'Division';
+  // API uses 'logo' or 'logoDark', not 'teamLogo'
+  const teamLogo = apiTeamInfo?.logo || apiTeamInfo?.logoDark || apiTeamInfo?.teamLogo || team.logo_url;
+  const conference = apiTeamInfo?.division ? 
+    (['southwest', 'pacific', 'northwest'].includes(apiTeamInfo.division) ? 'Western' : 'Eastern') 
+    : 'NBA';
+  const division = apiTeamInfo?.division ? 
+    apiTeamInfo.division.charAt(0).toUpperCase() + apiTeamInfo.division.slice(1) 
+    : 'Division';
 
   return (
     <main className="min-h-screen bg-background">
@@ -115,9 +120,9 @@ const TeamProfile = () => {
                 <span className="px-3 py-1 bg-secondary rounded-full text-sm font-medium">
                   {division} Division
                 </span>
-                {apiTeamInfo?.teamAbbr && (
+                {(apiTeamInfo?.abbrev || apiTeamInfo?.teamAbbr) && (
                   <span className="px-3 py-1 bg-muted rounded-full text-sm font-medium">
-                    {apiTeamInfo.teamAbbr}
+                    {(apiTeamInfo.abbrev || apiTeamInfo.teamAbbr)?.toUpperCase()}
                   </span>
                 )}
               </div>
@@ -138,41 +143,49 @@ const TeamProfile = () => {
           </div>
         ) : apiRoster && apiRoster.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {apiRoster.map((player: RapidApiPlayer) => (
-              <Card 
-                key={player.playerId} 
-                className="bg-card/50 border-border/50 hover:bg-card/80 transition-colors cursor-pointer group"
-                onClick={() => navigate(`/player/api/${player.playerId}`)}
-              >
-                <CardContent className="p-4 flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-full bg-primary/20 overflow-hidden flex-shrink-0">
-                    {player.headShotUrl ? (
-                      <img 
-                        src={player.headShotUrl} 
-                        alt={player.playerName}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <User className="w-6 h-6 text-primary" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold truncate group-hover:text-primary transition-colors">
-                      {player.playerName}
-                    </h3>
-                    <div className="flex gap-2 text-sm text-muted-foreground">
-                      <span>{player.pos}</span>
-                      {player.height && <span>• {player.height}</span>}
+            {apiRoster.map((player: RapidApiPlayer) => {
+              const playerId = player.id || player.playerId || player.guid;
+              const playerName = player.fullName || player.playerName || `${player.firstName} ${player.lastName}`;
+              const playerImage = player.image || player.headShotUrl;
+              const playerHeight = player.displayHeight || player.height;
+              
+              return (
+                <Card 
+                  key={playerId} 
+                  className="bg-card/50 border-border/50 hover:bg-card/80 transition-colors cursor-pointer group"
+                  onClick={() => navigate(`/player/api/${playerId}`)}
+                >
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-full bg-primary/20 overflow-hidden flex-shrink-0">
+                      {playerImage ? (
+                        <img 
+                          src={playerImage} 
+                          alt={playerName}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <User className="w-6 h-6 text-primary" />
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold truncate group-hover:text-primary transition-colors">
+                        {playerName}
+                      </h3>
+                      <div className="flex gap-2 text-sm text-muted-foreground">
+                        {player.pos && <span>{player.pos}</span>}
+                        {playerHeight && <span>• {playerHeight}</span>}
+                        {player.age && <span>• {player.age} yrs</span>}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         ) : (
           <Card className="bg-card/50 border-border/50">
