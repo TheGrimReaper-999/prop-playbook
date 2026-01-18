@@ -2,21 +2,37 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 // Types based on RapidAPI NBA Free Data responses
+// Player list returns different field names than player info
 export interface RapidApiPlayer {
-  playerId: string;
-  playerName: string;
-  playerSlug: string;
-  team: string;
-  teamId: string;
-  pos: string;
-  height: string;
-  weight: string;
-  birthDate: string;
-  college: string;
-  country: string;
-  draftYear: string;
-  draftRound: string;
-  draftNumber: string;
+  // API uses 'id' not 'playerId' in player list
+  id?: string;
+  playerId?: string;
+  uid?: string;
+  guid?: string;
+  // API uses 'fullName' not 'playerName'
+  fullName?: string;
+  playerName?: string;
+  firstName?: string;
+  lastName?: string;
+  playerSlug?: string;
+  team?: string;
+  teamId?: string;
+  pos?: string;
+  // API uses 'displayHeight' and 'displayWeight'
+  height?: string;
+  displayHeight?: string;
+  weight?: string;
+  displayWeight?: string;
+  birthDate?: string;
+  age?: number;
+  salary?: number;
+  college?: string;
+  country?: string;
+  draftYear?: string;
+  draftRound?: string;
+  draftNumber?: string;
+  // API uses 'image' not 'headShotUrl'
+  image?: string;
   headShotUrl?: string;
 }
 
@@ -78,19 +94,31 @@ export interface GameLog {
 }
 
 export interface RapidApiTeam {
-  teamId: string;
-  teamName: string;
-  teamSlug: string;
-  teamAbbr: string;
-  teamCity: string;
-  teamLogo: string;
-  conference: string;
-  division: string;
+  id?: string;
+  teamId?: string;
+  name?: string;
+  teamName?: string;
+  teamSlug?: string;
+  shortName?: string;
+  abbrev?: string;
+  teamAbbr?: string;
+  teamCity?: string;
+  logo?: string;
+  logoDark?: string;
+  teamLogo?: string;
+  conference?: string;
+  division?: string;
+  href?: string;
 }
 
 export interface DivisionTeams {
   division: string;
-  teams: RapidApiTeam[];
+  teams: {
+    status?: string;
+    response?: {
+      teamList?: RapidApiTeam[];
+    };
+  } | RapidApiTeam[];
 }
 
 // Fetch player list by team ID
@@ -104,8 +132,9 @@ export const usePlayerList = (teamId: number | null) => {
       
       if (error) throw error;
       
-      // The API returns an array of players
-      return data || [];
+      // Handle nested API response: response.PlayerList or direct array
+      const players = data?.response?.PlayerList || data?.PlayerList || data || [];
+      return players;
     },
     enabled: !!teamId && teamId > 0,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
@@ -188,13 +217,24 @@ export const useTeamsByDivision = (division: 'southwest' | 'pacific' | 'northwes
 export const useTeamInfoByName = (teamName: string | null) => {
   const { data: allTeams, isLoading } = useAllNbaTeams();
   
-  const teamInfo = allTeams?.reduce<RapidApiTeam | null>((found, division) => {
+  const teamInfo = allTeams?.reduce<(RapidApiTeam & { division?: string }) | null>((found, division) => {
     if (found) return found;
-    const match = division.teams?.find((t: RapidApiTeam) => 
-      t.teamName?.toLowerCase().includes(teamName?.toLowerCase() || '') ||
-      teamName?.toLowerCase().includes(t.teamName?.toLowerCase() || '')
-    );
-    return match || null;
+    
+    // Handle nested API response structure: teams.response.teamList or teams array
+    const teamList = Array.isArray(division.teams) 
+      ? division.teams 
+      : division.teams?.response?.teamList || [];
+    
+    const match = teamList.find((t: RapidApiTeam) => {
+      const apiName = (t.name || t.teamName || '').toLowerCase();
+      const searchName = (teamName || '').toLowerCase();
+      return apiName.includes(searchName) || searchName.includes(apiName);
+    });
+    
+    if (match) {
+      return { ...match, division: division.division };
+    }
+    return null;
   }, null);
   
   return { data: teamInfo, isLoading };
