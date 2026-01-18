@@ -45,15 +45,56 @@ export interface DbPlayerStats {
   created_at: string;
 }
 
+// Fixture info for opponent lookup
+export interface FixtureInfo {
+  home_team_name: string | null;
+  away_team_name: string | null;
+  home_team_abbrev: string | null;
+  away_team_abbrev: string | null;
+  home_team_score: number | null;
+  away_team_score: number | null;
+}
+
 // Convert database stats to GameLogEntry format
-export const dbStatsToGameLogEntry = (stat: DbPlayerStats): GameLogEntry => {
+export const dbStatsToGameLogEntry = (
+  stat: DbPlayerStats, 
+  fixture?: FixtureInfo | null,
+  playerTeam?: string
+): GameLogEntry => {
+  let opponent = '';
+  let matchup = '';
+  let wl = '';
+  let score = '';
+
+  if (fixture && playerTeam) {
+    // Determine if player's team is home or away
+    const isHome = fixture.home_team_name?.toLowerCase().includes(playerTeam.toLowerCase()) ||
+                   fixture.home_team_abbrev?.toLowerCase() === playerTeam.toLowerCase();
+    
+    if (isHome) {
+      opponent = fixture.away_team_abbrev || fixture.away_team_name || '';
+      matchup = `vs ${opponent}`;
+      if (fixture.home_team_score !== null && fixture.away_team_score !== null) {
+        wl = fixture.home_team_score > fixture.away_team_score ? 'W' : 'L';
+        score = `${fixture.home_team_score}-${fixture.away_team_score}`;
+      }
+    } else {
+      opponent = fixture.home_team_abbrev || fixture.home_team_name || '';
+      matchup = `@ ${opponent}`;
+      if (fixture.home_team_score !== null && fixture.away_team_score !== null) {
+        wl = fixture.away_team_score > fixture.home_team_score ? 'W' : 'L';
+        score = `${fixture.away_team_score}-${fixture.home_team_score}`;
+      }
+    }
+  }
+
   return {
     gameId: stat.event_id,
     gameDate: stat.game_date,
-    matchup: '',
-    opponent: '',
-    wl: '',
-    score: '',
+    matchup,
+    opponent,
+    wl,
+    score,
     min: stat.minutes.toString(),
     pts: stat.points.toString(),
     reb: stat.rebounds.toString(),
@@ -115,10 +156,22 @@ export const getStatValuesForType = (
   return values.slice(0, n);
 };
 
-// Fetch player stats from database
+// Fetch player stats from database with fixture info for opponent names
 export const fetchPlayerStatsFromDb = async (
-  dbPlayerId: string
+  dbPlayerId: string,
+  playerTeam?: string
 ): Promise<GameLogEntry[]> => {
+  // Get the player's team if not provided
+  let teamName = playerTeam;
+  if (!teamName) {
+    const { data: player } = await supabase
+      .from('nba_players')
+      .select('team_name')
+      .eq('id', dbPlayerId)
+      .maybeSingle();
+    teamName = player?.team_name || '';
+  }
+
   const { data: stats, error } = await supabase
     .from('nba_player_stats')
     .select('*')
@@ -131,11 +184,28 @@ export const fetchPlayerStatsFromDb = async (
     return [];
   }
 
-  if (stats && stats.length > 0) {
-    return stats.map((s: DbPlayerStats) => dbStatsToGameLogEntry(s));
+  if (!stats || stats.length === 0) {
+    return [];
   }
 
-  return [];
+  // Get event IDs to fetch fixture info
+  const eventIds = stats.map(s => s.event_id);
+  
+  // Fetch fixture info for all events
+  const { data: fixtures } = await supabase
+    .from('nba_fixtures')
+    .select('event_id, home_team_name, away_team_name, home_team_abbrev, away_team_abbrev, home_team_score, away_team_score')
+    .in('event_id', eventIds);
+
+  // Create lookup map for fixtures
+  const fixtureMap = new Map<string, FixtureInfo>();
+  fixtures?.forEach(f => {
+    fixtureMap.set(f.event_id, f);
+  });
+
+  return stats.map((s: DbPlayerStats) => 
+    dbStatsToGameLogEntry(s, fixtureMap.get(s.event_id), teamName)
+  );
 };
 
 // Populate player stats via edge function and return them
