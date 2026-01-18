@@ -1,15 +1,18 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, User } from 'lucide-react';
+import { ArrowLeft, User, Plus, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePlayerList, useTeamInfoByName, RapidApiPlayer } from '@/hooks/useNbaApi';
+import { useBetSlip } from '@/contexts/BetSlipContext';
+import BetSlipButton from '@/components/BetSlipButton';
 
 const TeamProfile = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { addPlayer, removePlayer, isPlayerInSlip } = useBetSlip();
 
   // Fetch team from database
   const { data: team, isLoading: teamLoading } = useQuery({
@@ -32,6 +35,24 @@ const TeamProfile = () => {
 
   // Fetch roster from RapidAPI using team_id
   const { data: apiRoster, isLoading: rosterLoading } = usePlayerList(team?.team_id || null);
+
+  const handleTogglePlayer = (e: React.MouseEvent, player: RapidApiPlayer) => {
+    e.stopPropagation();
+    const playerId = player.id || player.playerId || player.guid || '';
+    const playerName = player.fullName || player.playerName || `${player.firstName} ${player.lastName}`;
+    const playerImage = player.image || player.headShotUrl;
+
+    if (isPlayerInSlip(playerId)) {
+      removePlayer(playerId);
+    } else {
+      addPlayer({
+        id: playerId,
+        name: playerName,
+        team: team?.name || 'Unknown Team',
+        image: playerImage,
+      });
+    }
+  };
 
   if (teamLoading) {
     return (
@@ -62,7 +83,6 @@ const TeamProfile = () => {
   }
 
   // Use API logo if available, otherwise fall back to DB logo
-  // API uses 'logo' or 'logoDark', not 'teamLogo'
   const teamLogo = apiTeamInfo?.logo || apiTeamInfo?.logoDark || apiTeamInfo?.teamLogo || team.logo_url;
   const conference = apiTeamInfo?.division ? 
     (['southwest', 'pacific', 'northwest'].includes(apiTeamInfo.division) ? 'Western' : 'Eastern') 
@@ -73,6 +93,9 @@ const TeamProfile = () => {
 
   return (
     <main className="min-h-screen bg-background">
+      {/* BetSlip Button */}
+      <BetSlipButton />
+
       {/* Header */}
       <div className="bg-gradient-to-b from-primary/20 to-background p-6">
         <div className="max-w-6xl mx-auto">
@@ -144,16 +167,35 @@ const TeamProfile = () => {
         ) : apiRoster && apiRoster.length > 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {apiRoster.map((player: RapidApiPlayer) => {
-              const playerId = player.id || player.playerId || player.guid;
+              const playerId = player.id || player.playerId || player.guid || '';
               const playerName = player.fullName || player.playerName || `${player.firstName} ${player.lastName}`;
               const playerImage = player.image || player.headShotUrl;
+              const inSlip = isPlayerInSlip(playerId);
               
               return (
                 <Card 
                   key={playerId} 
-                  className="bg-card/50 border-border/50 hover:bg-card/80 transition-colors cursor-pointer group"
+                  className={`bg-card/50 border-border/50 hover:bg-card/80 transition-colors cursor-pointer group relative ${
+                    inSlip ? 'ring-2 ring-primary' : ''
+                  }`}
                   onClick={() => navigate(`/player/api/${playerId}`)}
                 >
+                  {/* Add to BetSlip Button */}
+                  <button
+                    onClick={(e) => handleTogglePlayer(e, player)}
+                    className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center transition-all z-10 ${
+                      inSlip 
+                        ? 'bg-primary text-primary-foreground' 
+                        : 'bg-muted/80 hover:bg-primary hover:text-primary-foreground'
+                    }`}
+                  >
+                    {inSlip ? (
+                      <Check className="w-4 h-4" />
+                    ) : (
+                      <Plus className="w-4 h-4" />
+                    )}
+                  </button>
+
                   <CardContent className="p-4 flex flex-col items-center text-center">
                     <div className="w-20 h-20 rounded-full bg-primary/20 overflow-hidden mb-3">
                       {playerImage ? (
