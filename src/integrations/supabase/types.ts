@@ -167,13 +167,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "nba_player_stats_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "nba_fixtures"
-            referencedColumns: ["event_id"]
-          },
-          {
             foreignKeyName: "nba_player_stats_player_id_fkey"
             columns: ["player_id"]
             isOneToOne: false
