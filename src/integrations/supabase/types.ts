@@ -14,6 +14,174 @@ export type Database = {
   }
   public: {
     Tables: {
+      nba_fixtures: {
+        Row: {
+          away_team_abbrev: string
+          away_team_id: string
+          away_team_logo: string | null
+          away_team_name: string
+          away_team_score: number | null
+          created_at: string
+          event_id: string
+          game_date: string
+          home_team_abbrev: string
+          home_team_id: string
+          home_team_logo: string | null
+          home_team_name: string
+          home_team_score: number | null
+          id: string
+          season: string | null
+          status: string
+          status_detail: string | null
+          updated_at: string
+          venue_city: string | null
+          venue_name: string | null
+          venue_state: string | null
+        }
+        Insert: {
+          away_team_abbrev: string
+          away_team_id: string
+          away_team_logo?: string | null
+          away_team_name: string
+          away_team_score?: number | null
+          created_at?: string
+          event_id: string
+          game_date: string
+          home_team_abbrev: string
+          home_team_id: string
+          home_team_logo?: string | null
+          home_team_name: string
+          home_team_score?: number | null
+          id?: string
+          season?: string | null
+          status?: string
+          status_detail?: string | null
+          updated_at?: string
+          venue_city?: string | null
+          venue_name?: string | null
+          venue_state?: string | null
+        }
+        Update: {
+          away_team_abbrev?: string
+          away_team_id?: string
+          away_team_logo?: string | null
+          away_team_name?: string
+          away_team_score?: number | null
+          created_at?: string
+          event_id?: string
+          game_date?: string
+          home_team_abbrev?: string
+          home_team_id?: string
+          home_team_logo?: string | null
+          home_team_name?: string
+          home_team_score?: number | null
+          id?: string
+          season?: string | null
+          status?: string
+          status_detail?: string | null
+          updated_at?: string
+          venue_city?: string | null
+          venue_name?: string | null
+          venue_state?: string | null
+        }
+        Relationships: []
+      }
+      nba_player_stats: {
+        Row: {
+          assists: number | null
+          blocks: number | null
+          created_at: string
+          event_id: string
+          field_goal_pct: number | null
+          field_goals_attempted: number | null
+          field_goals_made: number | null
+          fouls: number | null
+          free_throw_pct: number | null
+          free_throws_attempted: number | null
+          free_throws_made: number | null
+          game_date: string
+          id: string
+          minutes: number | null
+          player_id: string | null
+          player_name: string
+          plus_minus: number | null
+          points: number | null
+          rebounds: number | null
+          steals: number | null
+          three_pt_attempted: number | null
+          three_pt_made: number | null
+          three_pt_pct: number | null
+          turnovers: number | null
+        }
+        Insert: {
+          assists?: number | null
+          blocks?: number | null
+          created_at?: string
+          event_id: string
+          field_goal_pct?: number | null
+          field_goals_attempted?: number | null
+          field_goals_made?: number | null
+          fouls?: number | null
+          free_throw_pct?: number | null
+          free_throws_attempted?: number | null
+          free_throws_made?: number | null
+          game_date: string
+          id?: string
+          minutes?: number | null
+          player_id?: string | null
+          player_name: string
+          plus_minus?: number | null
+          points?: number | null
+          rebounds?: number | null
+          steals?: number | null
+          three_pt_attempted?: number | null
+          three_pt_made?: number | null
+          three_pt_pct?: number | null
+          turnovers?: number | null
+        }
+        Update: {
+          assists?: number | null
+          blocks?: number | null
+          created_at?: string
+          event_id?: string
+          field_goal_pct?: number | null
+          field_goals_attempted?: number | null
+          field_goals_made?: number | null
+          fouls?: number | null
+          free_throw_pct?: number | null
+          free_throws_attempted?: number | null
+          free_throws_made?: number | null
+          game_date?: string
+          id?: string
+          minutes?: number | null
+          player_id?: string | null
+          player_name?: string
+          plus_minus?: number | null
+          points?: number | null
+          rebounds?: number | null
+          steals?: number | null
+          three_pt_attempted?: number | null
+          three_pt_made?: number | null
+          three_pt_pct?: number | null
+          turnovers?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nba_player_stats_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "nba_fixtures"
+            referencedColumns: ["event_id"]
+          },
+          {
+            foreignKeyName: "nba_player_stats_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "nba_players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nba_players: {
         Row: {
           created_at: string

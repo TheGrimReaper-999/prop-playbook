@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.populate-players]
 verify_jwt = false
+
+[functions.populate-stats]
+verify_jwt = false
