@@ -61,8 +61,15 @@ serve(async (req) => {
         url = `${BASE_URL}${ENDPOINTS['player-splits']}?playerid=${playerId}`;
         break;
       case 'schedule':
-        // Format: YYYYMMDD - if no date provided, use today
-        const dateParam = gameDate || new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        // Format: YYYYMMDD - API uses Eastern Time dates for NBA games
+        // Add 1 day to UTC date to get current ET date (games scheduled in ET)
+        let dateParam = gameDate;
+        if (!dateParam) {
+          const now = new Date();
+          // Add 5 hours to approximate ET, then add 1 day since NBA uses next-day dating
+          now.setDate(now.getDate() + 1);
+          dateParam = now.toISOString().slice(0, 10).replace(/-/g, '');
+        }
         url = `${BASE_URL}${ENDPOINTS['schedule']}?date=${dateParam}`;
         break;
       // Team division endpoints
