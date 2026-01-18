@@ -128,7 +128,6 @@ export interface DivisionTeams {
 export interface ScheduleGame {
   id: string;
   date: string;
-  localTime: string;
   status: 'pre' | 'in' | 'post';
   statusDetail: string;
   completed: boolean;
@@ -393,12 +392,6 @@ export const useTeamInfoByName = (teamName: string | null) => {
   return { data: teamInfo, isLoading };
 };
 
-// Helper to convert UTC date to local time string
-const formatLocalTime = (utcDateString: string): string => {
-  const date = new Date(utcDateString);
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-};
-
 // Fetch today's schedule/fixtures
 export const useSchedule = (gameDate?: string) => {
   return useQuery({
@@ -427,7 +420,6 @@ export const useSchedule = (gameDate?: string) => {
         return {
           id: event.id,
           date: event.date,
-          localTime: formatLocalTime(event.date),
           status: statusState as 'pre' | 'in' | 'post',
           statusDetail: event.status?.detail || '',
           completed: event.completed || false,
