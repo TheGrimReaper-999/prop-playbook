@@ -51,6 +51,21 @@ const PlayerProfile = () => {
     enabled: !!id,
   });
 
+  const { data: team } = useQuery({
+    queryKey: ['team-by-name', player?.team_name],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('nba_teams')
+        .select('id, name')
+        .eq('name', player!.team_name)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!player?.team_name,
+  });
+
   const stats = player ? generateMockStats(player.full_name) : null;
 
   const getTrendIcon = (value: number) => {
@@ -121,7 +136,12 @@ const PlayerProfile = () => {
               <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2">
                 {player.full_name}
               </h1>
-              <p className="text-xl text-muted-foreground mb-4">{player.team_name}</p>
+              <p 
+                className={`text-xl mb-4 ${team ? 'text-primary hover:underline cursor-pointer' : 'text-muted-foreground'}`}
+                onClick={() => team && navigate(`/team/${team.id}`)}
+              >
+                {player.team_name}
+              </p>
               <div className="flex gap-2 justify-center md:justify-start">
                 <span className="px-3 py-1 bg-primary/20 rounded-full text-sm font-medium text-primary">
                   Guard
