@@ -1,12 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Plus, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePlayerInfo, usePlayerGameLog, GameLog } from '@/hooks/useNbaApi';
 import BetSlipButton from '@/components/BetSlipButton';
+import { useBetSlip } from '@/contexts/BetSlipContext';
 
 // Fallback mock stats generator when API doesn't return data
 const generateMockStats = (playerName: string) => {
@@ -41,6 +42,7 @@ const generateMockGames = (playerName: string) => {
 // API Player Profile (from team roster)
 const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
   const navigate = useNavigate();
+  const { addPlayer, removePlayer, isPlayerInSlip } = useBetSlip();
   
   const { data: playerInfo, isLoading: infoLoading } = usePlayerInfo(playerId);
   const { data: gamelog, isLoading: gamelogLoading } = usePlayerGameLog(playerId);
@@ -87,6 +89,21 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
     ? gamelog.slice(0, 5) 
     : generateMockGames(name);
 
+  const inSlip = isPlayerInSlip(playerId);
+  
+  const handleToggleBetSlip = () => {
+    if (inSlip) {
+      removePlayer(playerId);
+    } else {
+      addPlayer({
+        id: playerId,
+        name,
+        team: team || 'Unknown Team',
+        image,
+      });
+    }
+  };
+
   return (
     <main className="min-h-screen bg-background">
       {/* BetSlip Button */}
@@ -121,9 +138,22 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
             </div>
             
             <div className="text-center md:text-left">
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2">
-                {name}
-              </h1>
+              <div className="flex items-center gap-3 justify-center md:justify-start mb-2">
+                <h1 className="text-4xl md:text-5xl font-black tracking-tight">
+                  {name}
+                </h1>
+                <button
+                  onClick={handleToggleBetSlip}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                    inSlip 
+                      ? 'bg-primary text-primary-foreground' 
+                      : 'bg-muted hover:bg-primary hover:text-primary-foreground'
+                  }`}
+                  title={inSlip ? 'Remove from BetSlip' : 'Add to BetSlip'}
+                >
+                  {inSlip ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                </button>
+              </div>
               <p className="text-xl text-muted-foreground mb-4">
                 {team}
               </p>
@@ -249,6 +279,7 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
 // Database Player Profile (from search) - also fetches real API data
 const DbPlayerProfile = ({ id }: { id: string }) => {
   const navigate = useNavigate();
+  const { addPlayer, removePlayer, isPlayerInSlip } = useBetSlip();
 
   const { data: player, isLoading } = useQuery({
     queryKey: ['player', id],
@@ -282,6 +313,22 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
 
   const stats = player ? generateMockStats(player.full_name) : null;
   const recentGames = player ? generateMockGames(player.full_name) : [];
+
+  const inSlip = player ? isPlayerInSlip(id) : false;
+  
+  const handleToggleBetSlip = () => {
+    if (!player) return;
+    if (inSlip) {
+      removePlayer(id);
+    } else {
+      addPlayer({
+        id,
+        name: player.full_name,
+        team: player.team_name,
+        image: player.image_url || undefined,
+      });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -345,9 +392,22 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
             </div>
             
             <div className="text-center md:text-left">
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2">
-                {player.full_name}
-              </h1>
+              <div className="flex items-center gap-3 justify-center md:justify-start mb-2">
+                <h1 className="text-4xl md:text-5xl font-black tracking-tight">
+                  {player.full_name}
+                </h1>
+                <button
+                  onClick={handleToggleBetSlip}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                    inSlip 
+                      ? 'bg-primary text-primary-foreground' 
+                      : 'bg-muted hover:bg-primary hover:text-primary-foreground'
+                  }`}
+                  title={inSlip ? 'Remove from BetSlip' : 'Add to BetSlip'}
+                >
+                  {inSlip ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                </button>
+              </div>
               <p 
                 className={`text-xl mb-4 ${team ? 'text-primary hover:underline cursor-pointer' : 'text-muted-foreground'}`}
                 onClick={() => team && navigate(`/team/${team.id}`)}
