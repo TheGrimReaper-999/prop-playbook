@@ -142,12 +142,11 @@ const TeamProfile = () => {
             ))}
           </div>
         ) : apiRoster && apiRoster.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {apiRoster.map((player: RapidApiPlayer) => {
               const playerId = player.id || player.playerId || player.guid;
               const playerName = player.fullName || player.playerName || `${player.firstName} ${player.lastName}`;
               const playerImage = player.image || player.headShotUrl;
-              const playerHeight = player.displayHeight || player.height;
               
               return (
                 <Card 
@@ -155,8 +154,8 @@ const TeamProfile = () => {
                   className="bg-card/50 border-border/50 hover:bg-card/80 transition-colors cursor-pointer group"
                   onClick={() => navigate(`/player/api/${playerId}`)}
                 >
-                  <CardContent className="p-4 flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-full bg-primary/20 overflow-hidden flex-shrink-0">
+                  <CardContent className="p-4 flex flex-col items-center text-center">
+                    <div className="w-20 h-20 rounded-full bg-primary/20 overflow-hidden mb-3">
                       {playerImage ? (
                         <img 
                           src={playerImage} 
@@ -164,24 +163,17 @@ const TeamProfile = () => {
                           className="w-full h-full object-cover"
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
                           }}
                         />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <User className="w-6 h-6 text-primary" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold truncate group-hover:text-primary transition-colors">
-                        {playerName}
-                      </h3>
-                      <div className="flex gap-2 text-sm text-muted-foreground">
-                        {player.pos && <span>{player.pos}</span>}
-                        {playerHeight && <span>• {playerHeight}</span>}
-                        {player.age && <span>• {player.age} yrs</span>}
+                      ) : null}
+                      <div className={`w-full h-full flex items-center justify-center ${playerImage ? 'hidden' : ''}`}>
+                        <User className="w-8 h-8 text-primary" />
                       </div>
                     </div>
+                    <h3 className="font-semibold text-sm truncate w-full group-hover:text-primary transition-colors">
+                      {playerName}
+                    </h3>
                   </CardContent>
                 </Card>
               );

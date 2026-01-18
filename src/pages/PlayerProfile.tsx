@@ -72,10 +72,19 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
     );
   }
 
-  const stats = playerInfo.stats || generateMockStats(playerInfo.playerName);
+  // Extract data using correct field names from API
+  const name = playerInfo.fullName || playerInfo.playerName || `${playerInfo.firstName || ''} ${playerInfo.lastName || ''}`.trim();
+  const image = playerInfo.image || playerInfo.headShotUrl;
+  const team = playerInfo.team;
+  const position = playerInfo.pos;
+  const height = playerInfo.displayHeight || playerInfo.height;
+  const weight = playerInfo.displayWeight || playerInfo.weight;
+  const age = playerInfo.age;
+
+  const stats = playerInfo.stats || generateMockStats(name);
   const games = gamelog && gamelog.length > 0 
     ? gamelog.slice(0, 5) 
-    : generateMockGames(playerInfo.playerName);
+    : generateMockGames(name);
 
   return (
     <main className="min-h-screen bg-background">
@@ -94,43 +103,45 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
           {/* Player Header */}
           <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
             <div className="w-40 h-40 rounded-full bg-primary/20 overflow-hidden ring-4 ring-primary/30">
-              {playerInfo.headShotUrl ? (
+              {image ? (
                 <img 
-                  src={playerInfo.headShotUrl} 
-                  alt={playerInfo.playerName}
+                  src={image} 
+                  alt={name}
                   className="w-full h-full object-cover"
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-4xl font-bold text-primary">
-                  {playerInfo.playerName.split(' ').map(n => n[0]).join('')}
+                  {name.split(' ').map(n => n[0]).join('')}
                 </div>
               )}
             </div>
             
             <div className="text-center md:text-left">
               <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2">
-                {playerInfo.playerName}
+                {name}
               </h1>
               <p className="text-xl text-muted-foreground mb-4">
-                {playerInfo.team}
+                {team}
               </p>
               <div className="flex gap-2 justify-center md:justify-start flex-wrap">
-                <span className="px-3 py-1 bg-primary/20 rounded-full text-sm font-medium text-primary">
-                  {playerInfo.pos || 'Player'}
-                </span>
+                {position && (
+                  <span className="px-3 py-1 bg-primary/20 rounded-full text-sm font-medium text-primary">
+                    {position}
+                  </span>
+                )}
                 {playerInfo.jersey && (
                   <span className="px-3 py-1 bg-secondary rounded-full text-sm font-medium">
                     #{playerInfo.jersey}
                   </span>
                 )}
-                {playerInfo.height && (
+                {height && (
                   <span className="px-3 py-1 bg-secondary rounded-full text-sm font-medium">
-                    {playerInfo.height}
+                    {height}
                   </span>
                 )}
-                {playerInfo.weight && (
+                {weight && (
                   <span className="px-3 py-1 bg-secondary rounded-full text-sm font-medium">
-                    {playerInfo.weight}
+                    {weight}
                   </span>
                 )}
               </div>
@@ -144,8 +155,8 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
                 {playerInfo.exp && (
                   <span>📅 {playerInfo.exp} years exp</span>
                 )}
-                {playerInfo.age && (
-                  <span>Age: {playerInfo.age}</span>
+                {age && (
+                  <span>Age: {age}</span>
                 )}
               </div>
               {playerInfo.draftYear && playerInfo.draftRound && playerInfo.draftNumber && (
