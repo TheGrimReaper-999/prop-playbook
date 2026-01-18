@@ -1,12 +1,14 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt, Check, Layers } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt, Check, Layers, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useBetSlip, BetSlipLeg, ParlayLeg } from '@/contexts/BetSlipContext';
+import { useBetSlip, BetSlipLeg, ParlayLeg, LegStats } from '@/contexts/BetSlipContext';
 import { evaluateProp, BetDecisionResult } from '@/lib/betting-utils';
 import { toast } from '@/hooks/use-toast';
+import { getStatValuesForType } from '@/hooks/usePlayerStats';
+import StatsChart from '@/components/StatsChart';
 
 const STAT_TYPE_LABELS: Record<string, string> = {
   pts: 'Points',
@@ -25,9 +27,21 @@ interface DecisionCardProps {
   legNumber: number;
   isSelected: boolean;
   onToggleSelect: (legId: string) => void;
+  stats?: LegStats;
+  isExpanded: boolean;
+  onToggleExpand: (legId: string) => void;
 }
 
-const DecisionCard = ({ leg, result, legNumber, isSelected, onToggleSelect }: DecisionCardProps) => {
+const DecisionCard = ({ 
+  leg, 
+  result, 
+  legNumber, 
+  isSelected, 
+  onToggleSelect,
+  stats,
+  isExpanded,
+  onToggleExpand,
+}: DecisionCardProps) => {
   const getDecisionColor = (decision: string) => {
     switch (decision) {
       case 'TAKE OVER':
@@ -64,14 +78,15 @@ const DecisionCard = ({ leg, result, legNumber, isSelected, onToggleSelect }: De
 
   const statLabel = STAT_TYPE_LABELS[leg.details.statType] || leg.details.statType || 'Not Set';
   const mainLine = leg.details.mainLine || '-';
+  const hasStats = stats && stats.games.length > 0;
 
   return (
-    <Card 
-      className={`${getDecisionBgColor(result.decision, isSelected)} transition-all cursor-pointer`}
-      onClick={() => onToggleSelect(leg.legId)}
-    >
+    <Card className={`${getDecisionBgColor(result.decision, isSelected)} transition-all`}>
       <CardContent className="p-6">
-        <div className="flex items-start gap-4">
+        <div 
+          className="flex items-start gap-4 cursor-pointer"
+          onClick={() => onToggleSelect(leg.legId)}
+        >
           {/* Checkbox */}
           <div className="flex-shrink-0 pt-1">
             <Checkbox
@@ -95,6 +110,11 @@ const DecisionCard = ({ leg, result, legNumber, isSelected, onToggleSelect }: De
                 <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full flex items-center gap-1">
                   <Check className="w-3 h-3" />
                   Selected
+                </span>
+              )}
+              {hasStats && (
+                <span className="text-xs bg-green-500/20 text-green-500 px-2 py-0.5 rounded-full">
+                  {stats.games.length} games
                 </span>
               )}
             </div>
@@ -162,6 +182,41 @@ const DecisionCard = ({ leg, result, legNumber, isSelected, onToggleSelect }: De
             </div>
           </div>
         </div>
+
+        {/* Expand Button */}
+        {hasStats && (
+          <div className="mt-4 pt-4 border-t border-border/30">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleExpand(leg.legId);
+              }}
+            >
+              <BarChart3 className="w-4 h-4 mr-2" />
+              {isExpanded ? 'Hide' : 'Show'} Game Log Chart
+              {isExpanded ? (
+                <ChevronUp className="w-4 h-4 ml-2" />
+              ) : (
+                <ChevronDown className="w-4 h-4 ml-2" />
+              )}
+            </Button>
+          </div>
+        )}
+
+        {/* Expanded Chart */}
+        {isExpanded && hasStats && (
+          <div className="mt-4" onClick={(e) => e.stopPropagation()}>
+            <StatsChart
+              games={stats.games}
+              statType={leg.details.statType}
+              mainLine={parseFloat(leg.details.mainLine) || undefined}
+              playerName={leg.player.name}
+            />
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -169,8 +224,9 @@ const DecisionCard = ({ leg, result, legNumber, isSelected, onToggleSelect }: De
 
 const Decisions = () => {
   const navigate = useNavigate();
-  const { legs, saveParlay } = useBetSlip();
+  const { legs, legStats, saveParlay } = useBetSlip();
   const [selectedLegs, setSelectedLegs] = useState<Set<string>>(new Set());
+  const [expandedLegs, setExpandedLegs] = useState<Set<string>>(new Set());
 
   const decisions = useMemo(() => {
     return legs.map((leg) => {
@@ -178,16 +234,25 @@ const Decisions = () => {
       const overOdds = parseFloat(leg.details.oddsOver) || 0;
       const underOdds = parseFloat(leg.details.oddsUnder) || 0;
 
+      // Get real stats if available
+      const stats = legStats.get(leg.legId);
+      let last10Stats: number[] | undefined;
+      
+      if (stats && stats.games.length > 0) {
+        last10Stats = getStatValuesForType(stats.statValues, leg.details.statType, 10);
+      }
+
       const result = evaluateProp({
         propLine,
         overOdds,
         underOdds,
         oddsFormat: leg.details.oddsFormat,
+        last10Stats,
       });
 
-      return { leg, result };
+      return { leg, result, stats };
     });
-  }, [legs]);
+  }, [legs, legStats]);
 
   const summary = useMemo(() => {
     const takeOver = decisions.filter((d) => d.result.decision === 'TAKE OVER').length;
@@ -198,6 +263,18 @@ const Decisions = () => {
 
   const toggleSelectLeg = (legId: string) => {
     setSelectedLegs((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(legId)) {
+        newSet.delete(legId);
+      } else {
+        newSet.add(legId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleExpandLeg = (legId: string) => {
+    setExpandedLegs((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(legId)) {
         newSet.delete(legId);
@@ -348,7 +425,7 @@ const Decisions = () => {
 
             {/* Decision Cards */}
             <div className="space-y-4">
-              {decisions.map(({ leg, result }, index) => (
+              {decisions.map(({ leg, result, stats }, index) => (
                 <DecisionCard
                   key={leg.legId}
                   leg={leg}
@@ -356,6 +433,9 @@ const Decisions = () => {
                   legNumber={index + 1}
                   isSelected={selectedLegs.has(leg.legId)}
                   onToggleSelect={toggleSelectLeg}
+                  stats={stats}
+                  isExpanded={expandedLegs.has(leg.legId)}
+                  onToggleExpand={toggleExpandLeg}
                 />
               ))}
             </div>
