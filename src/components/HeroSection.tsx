@@ -1,9 +1,20 @@
+import { useNavigate } from 'react-router-dom';
 import SearchBar from './SearchBar';
+import { SearchResult } from '@/hooks/useAutocomplete';
 
 const HeroSection = () => {
+  const navigate = useNavigate();
+
   const handleSearch = (query: string) => {
     console.log('Searching for:', query);
-    // Future: implement search functionality
+  };
+
+  const handleSelect = (result: SearchResult) => {
+    if (result.type === 'player') {
+      navigate(`/player/${result.id}`);
+    } else {
+      navigate(`/team/${result.id}`);
+    }
   };
 
   return (
@@ -30,7 +41,7 @@ const HeroSection = () => {
         </p>
         
         {/* Search Bar */}
-        <SearchBar onSearch={handleSearch} />
+        <SearchBar onSearch={handleSearch} onSelect={handleSelect} />
         
         {/* Helper text */}
         <p className="text-muted-foreground text-sm mt-6">
