@@ -6,30 +6,99 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
-// Mock recent stats - in production, these would come from an API
-const generateMockStats = (playerName: string) => {
+interface PlayerStats {
+  ppg: string;
+  rpg: string;
+  apg: string;
+  spg: string;
+  bpg: string;
+  fgPct: string;
+  threePct: string;
+  ftPct: string;
+}
+
+interface PlayerInfo {
+  position?: string;
+  jersey?: string;
+  height?: string;
+  weight?: string;
+}
+
+const fetchPlayerStats = async (playerName: string): Promise<{ stats: PlayerStats | null; info: PlayerInfo | null }> => {
+  try {
+    // First get all players to find matching player ID
+    const { data: listData, error: listError } = await supabase.functions.invoke('nba-stats', {
+      body: { endpoint: '/players' }
+    });
+    
+    if (listError) throw listError;
+    
+    // Search for the player in the response
+    const players = listData?.response || listData?.players || listData || [];
+    const nameLower = playerName.toLowerCase();
+    
+    // Find player that matches the name
+    const matchedPlayer = players.find((p: any) => {
+      const fullName = p.full_name || p.name || `${p.first_name} ${p.last_name}`;
+      return fullName?.toLowerCase().includes(nameLower) || nameLower.includes(fullName?.toLowerCase());
+    });
+
+    if (!matchedPlayer) {
+      console.log('Player not found in API, using fallback stats');
+      return { stats: null, info: null };
+    }
+
+    // Get player info
+    const playerId = matchedPlayer.id || matchedPlayer.player_id;
+    const { data: infoData } = await supabase.functions.invoke('nba-stats', {
+      body: { endpoint: `/players/${playerId}` }
+    });
+
+    const playerInfo = infoData?.response?.[0] || infoData || {};
+    
+    return {
+      stats: null, // API may not have stats, we'll use info for display
+      info: {
+        position: playerInfo.position || matchedPlayer.position,
+        jersey: playerInfo.jersey || matchedPlayer.jersey,
+        height: playerInfo.height || matchedPlayer.height,
+        weight: playerInfo.weight || matchedPlayer.weight,
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching player stats:', error);
+    return { stats: null, info: null };
+  }
+};
+
+// Fallback mock stats when API doesn't have data
+const generateMockStats = (playerName: string): PlayerStats => {
   const seed = playerName.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
   const random = (min: number, max: number) => min + ((seed % 100) / 100) * (max - min);
   
   return {
-    season: {
-      ppg: random(15, 30).toFixed(1),
-      rpg: random(4, 12).toFixed(1),
-      apg: random(2, 10).toFixed(1),
-      spg: random(0.5, 2.5).toFixed(1),
-      bpg: random(0.3, 2.0).toFixed(1),
-      fgPct: random(42, 52).toFixed(1),
-      threePct: random(32, 42).toFixed(1),
-      ftPct: random(75, 90).toFixed(1),
-    },
-    recentGames: [
-      { opponent: 'vs LAL', pts: Math.floor(random(18, 35)), reb: Math.floor(random(4, 12)), ast: Math.floor(random(2, 10)), result: 'W' },
-      { opponent: '@ BOS', pts: Math.floor(random(15, 32)), reb: Math.floor(random(3, 10)), ast: Math.floor(random(1, 8)), result: 'L' },
-      { opponent: 'vs MIA', pts: Math.floor(random(20, 38)), reb: Math.floor(random(5, 14)), ast: Math.floor(random(3, 12)), result: 'W' },
-      { opponent: '@ GSW', pts: Math.floor(random(12, 28)), reb: Math.floor(random(2, 8)), ast: Math.floor(random(2, 9)), result: 'W' },
-      { opponent: 'vs PHX', pts: Math.floor(random(22, 40)), reb: Math.floor(random(4, 11)), ast: Math.floor(random(4, 11)), result: 'L' },
-    ],
+    ppg: random(15, 30).toFixed(1),
+    rpg: random(4, 12).toFixed(1),
+    apg: random(2, 10).toFixed(1),
+    spg: random(0.5, 2.5).toFixed(1),
+    bpg: random(0.3, 2.0).toFixed(1),
+    fgPct: random(42, 52).toFixed(1),
+    threePct: random(32, 42).toFixed(1),
+    ftPct: random(75, 90).toFixed(1),
   };
+};
+
+const generateMockGames = (playerName: string) => {
+  const seed = playerName.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+  const random = (min: number, max: number) => min + ((seed % 100) / 100) * (max - min);
+  
+  return [
+    { opponent: 'vs LAL', pts: Math.floor(random(18, 35)), reb: Math.floor(random(4, 12)), ast: Math.floor(random(2, 10)), result: 'W' },
+    { opponent: '@ BOS', pts: Math.floor(random(15, 32)), reb: Math.floor(random(3, 10)), ast: Math.floor(random(1, 8)), result: 'L' },
+    { opponent: 'vs MIA', pts: Math.floor(random(20, 38)), reb: Math.floor(random(5, 14)), ast: Math.floor(random(3, 12)), result: 'W' },
+    { opponent: '@ GSW', pts: Math.floor(random(12, 28)), reb: Math.floor(random(2, 8)), ast: Math.floor(random(2, 9)), result: 'W' },
+    { opponent: 'vs PHX', pts: Math.floor(random(22, 40)), reb: Math.floor(random(4, 11)), ast: Math.floor(random(4, 11)), result: 'L' },
+  ];
 };
 
 const PlayerProfile = () => {
@@ -66,7 +135,15 @@ const PlayerProfile = () => {
     enabled: !!player?.team_name,
   });
 
-  const stats = player ? generateMockStats(player.full_name) : null;
+  const { data: apiData, isLoading: statsLoading } = useQuery({
+    queryKey: ['player-stats', player?.full_name],
+    queryFn: () => fetchPlayerStats(player!.full_name),
+    enabled: !!player?.full_name,
+  });
+
+  const stats = apiData?.stats || (player ? generateMockStats(player.full_name) : null);
+  const playerInfo = apiData?.info;
+  const recentGames = player ? generateMockGames(player.full_name) : [];
 
   const getTrendIcon = (value: number) => {
     if (value > 0) return <TrendingUp className="w-4 h-4 text-green-500" />;
@@ -144,10 +221,10 @@ const PlayerProfile = () => {
               </p>
               <div className="flex gap-2 justify-center md:justify-start">
                 <span className="px-3 py-1 bg-primary/20 rounded-full text-sm font-medium text-primary">
-                  Guard
+                  {playerInfo?.position || 'Guard'}
                 </span>
                 <span className="px-3 py-1 bg-secondary rounded-full text-sm font-medium">
-                  #23
+                  #{playerInfo?.jersey || '00'}
                 </span>
               </div>
             </div>
@@ -161,14 +238,14 @@ const PlayerProfile = () => {
         <h2 className="text-2xl font-bold mb-4">Season Averages</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {stats && [
-            { label: 'PPG', value: stats.season.ppg },
-            { label: 'RPG', value: stats.season.rpg },
-            { label: 'APG', value: stats.season.apg },
-            { label: 'SPG', value: stats.season.spg },
-            { label: 'BPG', value: stats.season.bpg },
-            { label: 'FG%', value: stats.season.fgPct },
-            { label: '3P%', value: stats.season.threePct },
-            { label: 'FT%', value: stats.season.ftPct },
+            { label: 'PPG', value: stats.ppg },
+            { label: 'RPG', value: stats.rpg },
+            { label: 'APG', value: stats.apg },
+            { label: 'SPG', value: stats.spg },
+            { label: 'BPG', value: stats.bpg },
+            { label: 'FG%', value: stats.fgPct },
+            { label: '3P%', value: stats.threePct },
+            { label: 'FT%', value: stats.ftPct },
           ].map((stat) => (
             <Card key={stat.label} className="bg-card/50 border-border/50">
               <CardContent className="p-4 text-center">
@@ -195,7 +272,7 @@ const PlayerProfile = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {stats?.recentGames.map((game, idx) => (
+                  {recentGames.map((game, idx) => (
                     <tr key={idx} className="border-b border-border/30 last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="p-4 font-medium">{game.opponent}</td>
                       <td className="p-4 text-center">{game.pts}</td>
