@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Trash2, User, Receipt, ChevronDown, ChevronUp, Plus, X, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -32,10 +32,23 @@ const ODDS_FORMATS = [
   { value: 'multiplier', label: 'Profit Multiplier' },
 ];
 
+// Default lines by stat type
+const DEFAULT_LINES: Record<string, number[]> = {
+  pts: [5, 10, 15, 20, 25],
+  reb: [3, 5, 7, 10, 13],
+  ast: [3, 5, 7, 10, 13],
+  '3pm': [1, 2, 3, 4, 5],
+};
+
+// Combo stat types that need over/under odds
+const COMBO_STATS = ['pra', 'pr', 'pa', 'ra'];
+
 interface AltLine {
   id: string;
   line: string;
   odds: string;
+  oddsOver?: string;
+  oddsUnder?: string;
 }
 
 interface PlayerBetDetails {
@@ -69,7 +82,6 @@ const BetSlip = () => {
 
   const savePlayerDetails = useCallback((playerId: string) => {
     setSaveStatus(prev => ({ ...prev, [playerId]: 'saving' }));
-    // Simulate save - in real app this would save to database
     setTimeout(() => {
       setSaveStatus(prev => ({ ...prev, [playerId]: 'saved' }));
       setTimeout(() => {
@@ -77,18 +89,6 @@ const BetSlip = () => {
       }, 1500);
     }, 300);
   }, []);
-
-  const updateBetDetail = useCallback((playerId: string, field: keyof PlayerBetDetails, value: any) => {
-    setBetDetails(prev => ({
-      ...prev,
-      [playerId]: {
-        ...getPlayerBetDetailsFromState(prev, playerId),
-        [field]: value,
-      },
-    }));
-    // Auto-save on change
-    savePlayerDetails(playerId);
-  }, [savePlayerDetails]);
 
   const getPlayerBetDetailsFromState = (state: Record<string, PlayerBetDetails>, playerId: string): PlayerBetDetails => {
     return state[playerId] || {
@@ -102,29 +102,104 @@ const BetSlip = () => {
     };
   };
 
+  const updateBetDetail = useCallback((playerId: string, field: keyof PlayerBetDetails, value: any) => {
+    setBetDetails(prev => ({
+      ...prev,
+      [playerId]: {
+        ...getPlayerBetDetailsFromState(prev, playerId),
+        [field]: value,
+      },
+    }));
+    savePlayerDetails(playerId);
+  }, [savePlayerDetails]);
+
   const getPlayerBetDetails = (playerId: string): PlayerBetDetails => {
     return getPlayerBetDetailsFromState(betDetails, playerId);
   };
 
+  const generateDefaultLines = (statType: string): AltLine[] => {
+    const isComboStat = COMBO_STATS.includes(statType);
+    
+    if (isComboStat) {
+      // For combo stats, create 3 empty lines with over/under odds
+      return [1, 2, 3].map(() => ({
+        id: crypto.randomUUID(),
+        line: '',
+        odds: '',
+        oddsOver: '',
+        oddsUnder: '',
+      }));
+    }
+    
+    // For simple stats, use predefined defaults
+    const defaultValues = DEFAULT_LINES[statType] || [5, 10, 15, 20, 25];
+    return defaultValues.map(line => ({
+      id: crypto.randomUUID(),
+      line: line.toString(),
+      odds: '',
+    }));
+  };
+
   const toggleAdvancedMode = (playerId: string) => {
     const current = getPlayerBetDetails(playerId);
-    updateBetDetail(playerId, 'advancedMode', !current.advancedMode);
+    const newAdvancedMode = !current.advancedMode;
+    
+    if (newAdvancedMode && current.statType) {
+      // Generate default lines when enabling advanced mode
+      const defaultLines = generateDefaultLines(current.statType);
+      setBetDetails(prev => ({
+        ...prev,
+        [playerId]: {
+          ...getPlayerBetDetailsFromState(prev, playerId),
+          advancedMode: true,
+          altLines: defaultLines,
+        },
+      }));
+      savePlayerDetails(playerId);
+    } else {
+      updateBetDetail(playerId, 'advancedMode', newAdvancedMode);
+    }
+  };
+
+  const handleStatTypeChange = (playerId: string, statType: string) => {
+    const current = getPlayerBetDetails(playerId);
+    
+    // Update stat type and regenerate lines if in advanced mode
+    if (current.advancedMode) {
+      const defaultLines = generateDefaultLines(statType);
+      setBetDetails(prev => ({
+        ...prev,
+        [playerId]: {
+          ...getPlayerBetDetailsFromState(prev, playerId),
+          statType,
+          altLines: defaultLines,
+        },
+      }));
+      savePlayerDetails(playerId);
+    } else {
+      updateBetDetail(playerId, 'statType', statType);
+    }
   };
 
   const addAltLine = (playerId: string) => {
     const current = getPlayerBetDetails(playerId);
-    if (current.altLines.length >= 5) {
+    const isComboStat = COMBO_STATS.includes(current.statType);
+    const maxLines = isComboStat ? 5 : 10;
+    
+    if (current.altLines.length >= maxLines) {
       toast({
         title: "Maximum lines reached",
-        description: "You can only add up to 5 alternate lines.",
+        description: `You can only add up to ${maxLines} lines.`,
         variant: "destructive",
       });
       return;
     }
+    
     const newLine: AltLine = {
       id: crypto.randomUUID(),
       line: '',
       odds: '',
+      ...(isComboStat && { oddsOver: '', oddsUnder: '' }),
     };
     updateBetDetail(playerId, 'altLines', [...current.altLines, newLine]);
   };
@@ -138,7 +213,7 @@ const BetSlip = () => {
     );
   };
 
-  const updateAltLine = (playerId: string, lineId: string, field: 'line' | 'odds', value: string) => {
+  const updateAltLine = (playerId: string, lineId: string, field: keyof AltLine, value: string) => {
     const current = getPlayerBetDetails(playerId);
     const updatedLines = current.altLines.map(l => 
       l.id === lineId ? { ...l, [field]: value } : l
@@ -220,6 +295,7 @@ const BetSlip = () => {
                 const isExpanded = expandedPlayers.has(player.id);
                 const details = getPlayerBetDetails(player.id);
                 const status = saveStatus[player.id] || 'idle';
+                const isComboStat = COMBO_STATS.includes(details.statType);
 
                 return (
                   <Card 
@@ -251,7 +327,6 @@ const BetSlip = () => {
                           <p className="text-sm text-muted-foreground truncate">{player.team}</p>
                         </div>
 
-                        {/* Auto-save indicator */}
                         {status === 'saved' && (
                           <span className="text-xs text-green-500 flex items-center gap-1">
                             <Check className="w-3 h-3" />
@@ -291,7 +366,7 @@ const BetSlip = () => {
                               <Label htmlFor={`stat-${player.id}`}>Stat Type</Label>
                               <Select
                                 value={details.statType}
-                                onValueChange={(value) => updateBetDetail(player.id, 'statType', value)}
+                                onValueChange={(value) => handleStatTypeChange(player.id, value)}
                               >
                                 <SelectTrigger id={`stat-${player.id}`} className="bg-background">
                                   <SelectValue placeholder="Select stat type" />
@@ -368,49 +443,79 @@ const BetSlip = () => {
                           </div>
 
                           {/* Advanced Mode - Alternate Lines */}
-                          {details.advancedMode && (
+                          {details.advancedMode && details.statType && (
                             <div className="space-y-3 pt-2 border-t border-border/30">
                               <div className="flex items-center justify-between">
                                 <Label className="text-sm font-medium">Alternate Lines</Label>
-                                {details.altLines.length < 5 && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => addAltLine(player.id)}
-                                    className="h-7 text-xs"
-                                  >
-                                    <Plus className="w-3 h-3 mr-1" />
-                                    Add Line
-                                  </Button>
-                                )}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => addAltLine(player.id)}
+                                  className="h-7 text-xs"
+                                >
+                                  <Plus className="w-3 h-3 mr-1" />
+                                  Add Line
+                                </Button>
                               </div>
                               
                               {details.altLines.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">
-                                  No alternate lines added. Click "Add Line" to add up to 5 lines.
+                                  No alternate lines. Click "Add Line" to add more.
                                 </p>
                               ) : (
                                 <div className="space-y-2">
+                                  {/* Header row */}
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
+                                    <span className="w-6">#</span>
+                                    <span className="flex-1">Line</span>
+                                    {isComboStat ? (
+                                      <>
+                                        <span className="w-20">Over Odds</span>
+                                        <span className="w-20">Under Odds</span>
+                                      </>
+                                    ) : (
+                                      <span className="w-24">Odds</span>
+                                    )}
+                                    <span className="w-9"></span>
+                                  </div>
+                                  
                                   {details.altLines.map((altLine, index) => (
                                     <div key={altLine.id} className="flex items-center gap-2">
                                       <span className="text-xs text-muted-foreground w-6">#{index + 1}</span>
-                                      <div className="flex-1 grid grid-cols-2 gap-2">
-                                        <Input
-                                          type="number"
-                                          step="0.5"
-                                          placeholder="Line"
-                                          value={altLine.line}
-                                          onChange={(e) => updateAltLine(player.id, altLine.id, 'line', e.target.value)}
-                                          className="bg-background h-9"
-                                        />
+                                      <Input
+                                        type="number"
+                                        step="0.5"
+                                        placeholder="Line"
+                                        value={altLine.line}
+                                        onChange={(e) => updateAltLine(player.id, altLine.id, 'line', e.target.value)}
+                                        className="bg-background h-9 flex-1"
+                                      />
+                                      {isComboStat ? (
+                                        <>
+                                          <Input
+                                            type="text"
+                                            placeholder="Over"
+                                            value={altLine.oddsOver || ''}
+                                            onChange={(e) => updateAltLine(player.id, altLine.id, 'oddsOver', e.target.value)}
+                                            className="bg-background h-9 w-20"
+                                          />
+                                          <Input
+                                            type="text"
+                                            placeholder="Under"
+                                            value={altLine.oddsUnder || ''}
+                                            onChange={(e) => updateAltLine(player.id, altLine.id, 'oddsUnder', e.target.value)}
+                                            className="bg-background h-9 w-20"
+                                          />
+                                        </>
+                                      ) : (
                                         <Input
                                           type="text"
                                           placeholder="Odds"
                                           value={altLine.odds}
                                           onChange={(e) => updateAltLine(player.id, altLine.id, 'odds', e.target.value)}
-                                          className="bg-background h-9"
+                                          className="bg-background h-9 w-24"
                                         />
-                                      </div>
+                                      )}
                                       <Button
                                         variant="ghost"
                                         size="icon"
@@ -433,6 +538,7 @@ const BetSlip = () => {
                               size="sm"
                               className="flex-1"
                               onClick={() => toggleAdvancedMode(player.id)}
+                              disabled={!details.statType}
                             >
                               {details.advancedMode ? 'Basic Mode' : 'Advanced Mode'}
                             </Button>
@@ -446,6 +552,12 @@ const BetSlip = () => {
                               Save
                             </Button>
                           </div>
+                          
+                          {!details.statType && (
+                            <p className="text-xs text-muted-foreground text-center">
+                              Select a stat type to enable Advanced Mode
+                            </p>
+                          )}
                         </div>
                       )}
                     </CardContent>
