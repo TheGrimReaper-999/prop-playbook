@@ -77,6 +77,22 @@ export interface GameLog {
   plusMinus: string;
 }
 
+export interface RapidApiTeam {
+  teamId: string;
+  teamName: string;
+  teamSlug: string;
+  teamAbbr: string;
+  teamCity: string;
+  teamLogo: string;
+  conference: string;
+  division: string;
+}
+
+export interface DivisionTeams {
+  division: string;
+  teams: RapidApiTeam[];
+}
+
 // Fetch player list by team ID
 export const usePlayerList = (teamId: number | null) => {
   return useQuery({
@@ -131,5 +147,39 @@ export const usePlayerGameLog = (playerId: string | null) => {
     },
     enabled: !!playerId,
     staleTime: 5 * 60 * 1000,
+  });
+};
+
+// Fetch all NBA teams from all divisions
+export const useAllNbaTeams = () => {
+  return useQuery({
+    queryKey: ['nba-all-teams'],
+    queryFn: async (): Promise<DivisionTeams[]> => {
+      const { data, error } = await supabase.functions.invoke('nba-stats', {
+        body: { action: 'all-teams' }
+      });
+      
+      if (error) throw error;
+      
+      return data || [];
+    },
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+  });
+};
+
+// Fetch teams by division
+export const useTeamsByDivision = (division: 'southwest' | 'pacific' | 'northwest' | 'southeast' | 'atlantic' | 'central') => {
+  return useQuery({
+    queryKey: ['nba-teams', division],
+    queryFn: async (): Promise<RapidApiTeam[]> => {
+      const { data, error } = await supabase.functions.invoke('nba-stats', {
+        body: { action: `teams-${division}` }
+      });
+      
+      if (error) throw error;
+      
+      return data || [];
+    },
+    staleTime: 10 * 60 * 1000,
   });
 };
