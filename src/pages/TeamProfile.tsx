@@ -5,11 +5,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { usePlayerList, RapidApiPlayer } from '@/hooks/useNbaApi';
 
 const TeamProfile = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
+  // Fetch team from database
   const { data: team, isLoading: teamLoading } = useQuery({
     queryKey: ['team', id],
     queryFn: async () => {
@@ -25,22 +27,10 @@ const TeamProfile = () => {
     enabled: !!id,
   });
 
-  const { data: roster, isLoading: rosterLoading } = useQuery({
-    queryKey: ['team-roster', team?.name],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('nba_players')
-        .select('*')
-        .eq('team_name', team!.name)
-        .order('full_name');
-      
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!team?.name,
-  });
+  // Fetch roster from RapidAPI using team_id
+  const { data: apiRoster, isLoading: rosterLoading } = usePlayerList(team?.team_id || null);
 
-  const isLoading = teamLoading || rosterLoading;
+  const isLoading = teamLoading;
 
   if (teamLoading) {
     return (
@@ -105,15 +95,17 @@ const TeamProfile = () => {
                 {team.name}
               </h1>
               <p className="text-xl text-muted-foreground mb-4">
-                {roster?.length || 0} Players on Roster
+                {apiRoster?.length || 0} Players on Roster
               </p>
               <div className="flex gap-2 justify-center md:justify-start">
                 <span className="px-3 py-1 bg-primary/20 rounded-full text-sm font-medium text-primary">
-                  Western Conference
+                  NBA Team
                 </span>
-                <span className="px-3 py-1 bg-secondary rounded-full text-sm font-medium">
-                  Pacific Division
-                </span>
+                {team.team_id && (
+                  <span className="px-3 py-1 bg-secondary rounded-full text-sm font-medium">
+                    ID: {team.team_id}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -130,21 +122,24 @@ const TeamProfile = () => {
               <Skeleton key={i} className="h-24" />
             ))}
           </div>
-        ) : roster && roster.length > 0 ? (
+        ) : apiRoster && apiRoster.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {roster.map((player) => (
+            {apiRoster.map((player: RapidApiPlayer) => (
               <Card 
-                key={player.id} 
+                key={player.playerId} 
                 className="bg-card/50 border-border/50 hover:bg-card/80 transition-colors cursor-pointer group"
-                onClick={() => navigate(`/player/${player.id}`)}
+                onClick={() => navigate(`/player/api/${player.playerId}`)}
               >
                 <CardContent className="p-4 flex items-center gap-4">
                   <div className="w-14 h-14 rounded-full bg-primary/20 overflow-hidden flex-shrink-0">
-                    {player.image_url ? (
+                    {player.headShotUrl ? (
                       <img 
-                        src={player.image_url} 
-                        alt={player.full_name}
+                        src={player.headShotUrl} 
+                        alt={player.playerName}
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
@@ -154,9 +149,12 @@ const TeamProfile = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold truncate group-hover:text-primary transition-colors">
-                      {player.full_name}
+                      {player.playerName}
                     </h3>
-                    <p className="text-sm text-muted-foreground">View Profile →</p>
+                    <div className="flex gap-2 text-sm text-muted-foreground">
+                      <span>{player.pos}</span>
+                      {player.height && <span>• {player.height}</span>}
+                    </div>
                   </div>
                 </CardContent>
               </Card>

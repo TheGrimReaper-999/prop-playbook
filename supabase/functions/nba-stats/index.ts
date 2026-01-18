@@ -6,6 +6,14 @@ const corsHeaders = {
 };
 
 const RAPIDAPI_HOST = 'nba-api-free-data.p.rapidapi.com';
+const BASE_URL = `https://${RAPIDAPI_HOST}`;
+
+// Endpoint mapping for the RapidAPI NBA Free Data API
+const ENDPOINTS = {
+  'player-list': '/nba-player-list',      // ?teamid=13
+  'player-info': '/nba-player-info',       // ?playerid=4869342
+  'player-gamelog': '/nba-player-gamelog', // ?playerid=4869342
+} as const;
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -14,7 +22,7 @@ serve(async (req) => {
   }
 
   try {
-    const { endpoint, params } = await req.json();
+    const { action, teamId, playerId } = await req.json();
     const apiKey = Deno.env.get('RAPIDAPI_NBA_KEY');
     
     if (!apiKey) {
@@ -22,14 +30,26 @@ serve(async (req) => {
       throw new Error('API key not configured');
     }
 
-    // Build URL with query params
-    let url = `https://${RAPIDAPI_HOST}${endpoint}`;
-    if (params && Object.keys(params).length > 0) {
-      const searchParams = new URLSearchParams(params);
-      url += `?${searchParams.toString()}`;
+    let url: string;
+    
+    switch (action) {
+      case 'player-list':
+        if (!teamId) throw new Error('teamId is required for player-list');
+        url = `${BASE_URL}${ENDPOINTS['player-list']}?teamid=${teamId}`;
+        break;
+      case 'player-info':
+        if (!playerId) throw new Error('playerId is required for player-info');
+        url = `${BASE_URL}${ENDPOINTS['player-info']}?playerid=${playerId}`;
+        break;
+      case 'player-gamelog':
+        if (!playerId) throw new Error('playerId is required for player-gamelog');
+        url = `${BASE_URL}${ENDPOINTS['player-gamelog']}?playerid=${playerId}`;
+        break;
+      default:
+        throw new Error(`Unknown action: ${action}. Available actions: player-list, player-info, player-gamelog`);
     }
 
-    console.log(`Fetching NBA data from: ${url}`);
+    console.log(`Fetching NBA data: action=${action}, url=${url}`);
 
     const response = await fetch(url, {
       method: 'GET',
@@ -42,11 +62,11 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`RapidAPI error: ${response.status} - ${errorText}`);
-      throw new Error(`API returned ${response.status}`);
+      throw new Error(`API returned ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
-    console.log('Successfully fetched NBA data');
+    console.log(`Successfully fetched NBA data for action: ${action}`);
 
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

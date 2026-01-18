@@ -19,6 +19,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/player/:id" element={<PlayerProfile />} />
+          <Route path="/player/api/:id" element={<PlayerProfile />} />
           <Route path="/team/:id" element={<TeamProfile />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
