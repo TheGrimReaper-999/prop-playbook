@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import SearchBar from './SearchBar';
+import TodayFixtures from './TodayFixtures';
 import { SearchResult } from '@/hooks/useAutocomplete';
 
 const HeroSection = () => {
@@ -29,7 +30,7 @@ const HeroSection = () => {
       <div className="basketball-watermark animate-float" />
       
       {/* Content */}
-      <div className="relative z-10 text-center max-w-4xl mx-auto">
+      <div className="relative z-10 text-center max-w-4xl mx-auto w-full">
         {/* Main Title */}
         <h1 className="hero-title mb-4">
           PROP <span className="text-primary">DECISION</span>
@@ -47,6 +48,9 @@ const HeroSection = () => {
         <p className="text-muted-foreground text-sm mt-6">
           Enter a player name like <span className="text-foreground/80">"LeBron James"</span> or team like <span className="text-foreground/80">"Lakers"</span>
         </p>
+
+        {/* Today's Fixtures */}
+        <TodayFixtures />
       </div>
       
       {/* Bottom fade */}

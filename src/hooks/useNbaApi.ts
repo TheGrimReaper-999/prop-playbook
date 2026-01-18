@@ -125,6 +125,28 @@ export interface DivisionTeams {
   } | RapidApiTeam[];
 }
 
+export interface ScoreboardGame {
+  id: string;
+  date: string;
+  time: string;
+  status: string;
+  statusDetail: string;
+  homeTeam: {
+    id: string;
+    name: string;
+    abbreviation: string;
+    logo: string;
+    score?: string;
+  };
+  awayTeam: {
+    id: string;
+    name: string;
+    abbreviation: string;
+    logo: string;
+    score?: string;
+  };
+}
+
 // Fetch player list by team ID
 export const usePlayerList = (teamId: number | null) => {
   return useQuery({
@@ -365,4 +387,50 @@ export const useTeamInfoByName = (teamName: string | null) => {
   }, null);
   
   return { data: teamInfo, isLoading };
+};
+
+// Fetch today's scoreboard/fixtures
+export const useScoreboard = (gameDate?: string) => {
+  return useQuery({
+    queryKey: ['nba-scoreboard', gameDate],
+    queryFn: async (): Promise<ScoreboardGame[]> => {
+      const { data, error } = await supabase.functions.invoke('nba-stats', {
+        body: { action: 'scoreboard', gameDate }
+      });
+      
+      if (error) throw error;
+      
+      // Parse the scoreboard response
+      const events = data?.response?.games || data?.games || data?.response?.events || [];
+      
+      return events.map((event: any) => {
+        const competition = event.competitions?.[0] || event;
+        const homeTeam = competition.competitors?.find((c: any) => c.homeAway === 'home') || competition.homeTeam || {};
+        const awayTeam = competition.competitors?.find((c: any) => c.homeAway === 'away') || competition.awayTeam || {};
+        
+        return {
+          id: event.id || event.gameId,
+          date: event.date || event.gameDate,
+          time: event.status?.type?.shortDetail || event.time || '',
+          status: event.status?.type?.name || event.status || 'scheduled',
+          statusDetail: event.status?.type?.detail || event.statusDetail || '',
+          homeTeam: {
+            id: homeTeam.team?.id || homeTeam.id,
+            name: homeTeam.team?.displayName || homeTeam.team?.name || homeTeam.name,
+            abbreviation: homeTeam.team?.abbreviation || homeTeam.abbreviation,
+            logo: homeTeam.team?.logo || homeTeam.logo,
+            score: homeTeam.score,
+          },
+          awayTeam: {
+            id: awayTeam.team?.id || awayTeam.id,
+            name: awayTeam.team?.displayName || awayTeam.team?.name || awayTeam.name,
+            abbreviation: awayTeam.team?.abbreviation || awayTeam.abbreviation,
+            logo: awayTeam.team?.logo || awayTeam.logo,
+            score: awayTeam.score,
+          },
+        };
+      });
+    },
+    staleTime: 2 * 60 * 1000, // Refresh every 2 minutes
+  });
 };
