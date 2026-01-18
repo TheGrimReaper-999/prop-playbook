@@ -1,10 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar } from 'lucide-react';
+import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useBetSlip, SavedParlay, ParlayLeg } from '@/contexts/BetSlipContext';
 import { toast } from '@/hooks/use-toast';
-
+import { useParlayStatus, ParlayStatus, LegStatus } from '@/hooks/useParlayStatus';
 const STAT_TYPE_LABELS: Record<string, string> = {
   pts: 'Points',
   reb: 'Rebounds',
@@ -38,12 +38,51 @@ const getDecisionColor = (decision: string) => {
   }
 };
 
+const getStatusBadge = (status: ParlayStatus) => {
+  switch (status) {
+    case 'win':
+      return (
+        <span className="flex items-center gap-1.5 bg-green-500/20 text-green-500 px-3 py-1 rounded-full text-sm font-semibold">
+          <CheckCircle2 className="w-4 h-4" />
+          WIN
+        </span>
+      );
+    case 'loss':
+      return (
+        <span className="flex items-center gap-1.5 bg-red-500/20 text-red-500 px-3 py-1 rounded-full text-sm font-semibold">
+          <XCircle className="w-4 h-4" />
+          LOSS
+        </span>
+      );
+    default:
+      return (
+        <span className="flex items-center gap-1.5 bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-full text-sm font-semibold">
+          <Clock className="w-4 h-4" />
+          PENDING
+        </span>
+      );
+  }
+};
+
+const getLegStatusIcon = (status: LegStatus) => {
+  switch (status) {
+    case 'win':
+      return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+    case 'loss':
+      return <XCircle className="w-4 h-4 text-red-500" />;
+    default:
+      return <Clock className="w-4 h-4 text-yellow-500" />;
+  }
+};
+
 interface ParlayCardProps {
   parlay: SavedParlay;
   onDelete: (id: string) => void;
+  status?: ParlayStatus;
+  legStatuses?: Map<string, LegStatus>;
 }
 
-const ParlayCard = ({ parlay, onDelete }: ParlayCardProps) => {
+const ParlayCard = ({ parlay, onDelete, status = 'pending', legStatuses }: ParlayCardProps) => {
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -75,10 +114,11 @@ const ParlayCard = ({ parlay, onDelete }: ParlayCardProps) => {
               {formatDate(parlay.createdAt)}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <span className="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm font-semibold">
               {parlay.legs.length} Leg{parlay.legs.length !== 1 ? 's' : ''}
             </span>
+            {getStatusBadge(status)}
             <Button
               variant="ghost"
               size="icon"
@@ -92,28 +132,32 @@ const ParlayCard = ({ parlay, onDelete }: ParlayCardProps) => {
 
         {/* Legs */}
         <div className="space-y-2">
-          {parlay.legs.map((leg, index) => (
-            <div
-              key={leg.legId}
-              className="flex items-center gap-3 p-3 bg-background/50 rounded-lg"
-            >
-              <span className="text-xs text-muted-foreground font-medium w-6">
-                #{index + 1}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{leg.player.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {STAT_TYPE_LABELS[leg.statType] || leg.statType} • {leg.mainLine}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {getDecisionIcon(leg.decision)}
-                <span className={`text-sm font-semibold ${getDecisionColor(leg.decision)}`}>
-                  {leg.decision}
+          {parlay.legs.map((leg, index) => {
+            const legStatus = legStatuses?.get(leg.legId);
+            return (
+              <div
+                key={leg.legId}
+                className="flex items-center gap-3 p-3 bg-background/50 rounded-lg"
+              >
+                <span className="text-xs text-muted-foreground font-medium w-6">
+                  #{index + 1}
                 </span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{leg.player.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {STAT_TYPE_LABELS[leg.statType] || leg.statType} • {leg.mainLine}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {getDecisionIcon(leg.decision)}
+                  <span className={`text-sm font-semibold ${getDecisionColor(leg.decision)}`}>
+                    {leg.decision}
+                  </span>
+                  {legStatus && getLegStatusIcon(legStatus)}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </CardContent>
     </Card>
@@ -123,6 +167,7 @@ const ParlayCard = ({ parlay, onDelete }: ParlayCardProps) => {
 const Parlays = () => {
   const navigate = useNavigate();
   const { parlays, deleteParlay, clearParlays } = useBetSlip();
+  const { data: parlayStatuses } = useParlayStatus(parlays);
 
   const handleClearAll = () => {
     if (parlays.length === 0) return;
@@ -193,9 +238,21 @@ const Parlays = () => {
 
             {/* Parlay Cards */}
             <div className="space-y-4">
-              {parlays.map((parlay) => (
-                <ParlayCard key={parlay.id} parlay={parlay} onDelete={deleteParlay} />
-              ))}
+              {parlays.map((parlay) => {
+                const result = parlayStatuses?.get(parlay.id);
+                const legStatusMap = new Map<string, LegStatus>();
+                result?.legResults.forEach(lr => legStatusMap.set(lr.legId, lr.status));
+                
+                return (
+                  <ParlayCard 
+                    key={parlay.id} 
+                    parlay={parlay} 
+                    onDelete={deleteParlay}
+                    status={result?.status}
+                    legStatuses={legStatusMap}
+                  />
+                );
+              })}
             </div>
 
             {/* Action Button */}
