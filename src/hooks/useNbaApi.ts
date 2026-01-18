@@ -125,25 +125,29 @@ export interface DivisionTeams {
   } | RapidApiTeam[];
 }
 
-export interface ScoreboardGame {
+export interface ScheduleGame {
   id: string;
   date: string;
-  time: string;
-  status: string;
+  localTime: string;
+  status: 'pre' | 'in' | 'post';
   statusDetail: string;
+  completed: boolean;
+  venue?: string;
   homeTeam: {
     id: string;
     name: string;
     abbreviation: string;
     logo: string;
-    score?: string;
+    score?: number;
+    winner?: boolean;
   };
   awayTeam: {
     id: string;
     name: string;
     abbreviation: string;
     logo: string;
-    score?: string;
+    score?: number;
+    winner?: boolean;
   };
 }
 
@@ -389,44 +393,60 @@ export const useTeamInfoByName = (teamName: string | null) => {
   return { data: teamInfo, isLoading };
 };
 
-// Fetch today's scoreboard/fixtures
-export const useScoreboard = (gameDate?: string) => {
+// Helper to convert UTC date to local time string
+const formatLocalTime = (utcDateString: string): string => {
+  const date = new Date(utcDateString);
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+};
+
+// Fetch today's schedule/fixtures
+export const useSchedule = (gameDate?: string) => {
   return useQuery({
-    queryKey: ['nba-scoreboard', gameDate],
-    queryFn: async (): Promise<ScoreboardGame[]> => {
+    queryKey: ['nba-schedule', gameDate],
+    queryFn: async (): Promise<ScheduleGame[]> => {
+      // Format date as YYYYMMDD
+      const formattedDate = gameDate || new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      
       const { data, error } = await supabase.functions.invoke('nba-stats', {
-        body: { action: 'scoreboard', gameDate }
+        body: { action: 'schedule', gameDate: formattedDate }
       });
       
       if (error) throw error;
       
-      // Parse the scoreboard response
-      const events = data?.response?.games || data?.games || data?.response?.events || [];
+      // Parse the schedule response - events are in response.Events
+      const events = data?.response?.Events || [];
       
       return events.map((event: any) => {
-        const competition = event.competitions?.[0] || event;
-        const homeTeam = competition.competitors?.find((c: any) => c.homeAway === 'home') || competition.homeTeam || {};
-        const awayTeam = competition.competitors?.find((c: any) => c.homeAway === 'away') || competition.awayTeam || {};
+        // Find home and away teams from competitors array
+        const homeTeamData = event.competitors?.find((c: any) => c.isHome === true) || {};
+        const awayTeamData = event.competitors?.find((c: any) => c.isHome === false) || {};
+        
+        // Map status.state to our status type
+        const statusState = event.status?.state || 'pre';
         
         return {
-          id: event.id || event.gameId,
-          date: event.date || event.gameDate,
-          time: event.status?.type?.shortDetail || event.time || '',
-          status: event.status?.type?.name || event.status || 'scheduled',
-          statusDetail: event.status?.type?.detail || event.statusDetail || '',
+          id: event.id,
+          date: event.date,
+          localTime: formatLocalTime(event.date),
+          status: statusState as 'pre' | 'in' | 'post',
+          statusDetail: event.status?.detail || '',
+          completed: event.completed || false,
+          venue: event.venue?.fullName,
           homeTeam: {
-            id: homeTeam.team?.id || homeTeam.id,
-            name: homeTeam.team?.displayName || homeTeam.team?.name || homeTeam.name,
-            abbreviation: homeTeam.team?.abbreviation || homeTeam.abbreviation,
-            logo: homeTeam.team?.logo || homeTeam.logo,
-            score: homeTeam.score,
+            id: homeTeamData.id,
+            name: homeTeamData.displayName || homeTeamData.name,
+            abbreviation: homeTeamData.abbrev,
+            logo: homeTeamData.logo,
+            score: homeTeamData.score,
+            winner: homeTeamData.winner,
           },
           awayTeam: {
-            id: awayTeam.team?.id || awayTeam.id,
-            name: awayTeam.team?.displayName || awayTeam.team?.name || awayTeam.name,
-            abbreviation: awayTeam.team?.abbreviation || awayTeam.abbreviation,
-            logo: awayTeam.team?.logo || awayTeam.logo,
-            score: awayTeam.score,
+            id: awayTeamData.id,
+            name: awayTeamData.displayName || awayTeamData.name,
+            abbreviation: awayTeamData.abbrev,
+            logo: awayTeamData.logo,
+            score: awayTeamData.score,
+            winner: awayTeamData.winner,
           },
         };
       });
