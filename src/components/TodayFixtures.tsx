@@ -3,15 +3,19 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Calendar } from 'lucide-react';
 
-// Format UTC time from ISO string (e.g., "2025-01-23T00:30Z" -> "12:30 AM")
+// Format time to Eastern Time from ISO string (e.g., "2025-01-23T00:30Z" -> "7:30 PM ET")
 const formatGameTime = (dateString: string): string => {
   const date = new Date(dateString);
-  const hours = date.getUTCHours();
-  const minutes = date.getUTCMinutes();
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  const formattedHours = hours % 12 || 12;
-  const formattedMinutes = minutes.toString().padStart(2, '0');
-  return `${formattedHours}:${formattedMinutes} ${ampm} ET`;
+  
+  // Format to Eastern Time using Intl.DateTimeFormat
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'America/New_York',
+  });
+  
+  return `${formatter.format(date)} ET`;
 };
 
 const TodayFixtures = () => {
