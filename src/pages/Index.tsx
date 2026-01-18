@@ -4,7 +4,7 @@ import BetSlipButton from '@/components/BetSlipButton';
 const Index = () => {
   return (
     <main className="min-h-screen bg-background">
-      <BetSlipButton />
+      <BetSlipButton showSearch={false} />
       <HeroSection />
     </main>
   );
