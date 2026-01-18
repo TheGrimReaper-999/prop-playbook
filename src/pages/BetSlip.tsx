@@ -280,6 +280,23 @@ const BetSlip = () => {
                               />
                             </div>
                           </div>
+
+                          {/* Action buttons */}
+                          <div className="flex gap-3 pt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                            >
+                              Advanced Mode
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="flex-1"
+                            >
+                              Save
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </CardContent>
