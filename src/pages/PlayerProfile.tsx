@@ -134,9 +134,23 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
                   </span>
                 )}
               </div>
-              {playerInfo.college && (
+              <div className="flex gap-4 mt-3 text-sm text-muted-foreground flex-wrap justify-center md:justify-start">
+                {playerInfo.college && (
+                  <span>🎓 {playerInfo.college}</span>
+                )}
+                {playerInfo.country && (
+                  <span>🌍 {playerInfo.country}</span>
+                )}
+                {playerInfo.exp && (
+                  <span>📅 {playerInfo.exp} years exp</span>
+                )}
+                {playerInfo.age && (
+                  <span>Age: {playerInfo.age}</span>
+                )}
+              </div>
+              {playerInfo.draftYear && playerInfo.draftRound && playerInfo.draftNumber && (
                 <p className="text-sm text-muted-foreground mt-2">
-                  College: {playerInfo.college}
+                  Draft: {playerInfo.draftYear} Round {playerInfo.draftRound}, Pick {playerInfo.draftNumber}
                 </p>
               )}
             </div>
@@ -217,7 +231,7 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
   );
 };
 
-// Database Player Profile (from search)
+// Database Player Profile (from search) - also fetches real API data
 const DbPlayerProfile = ({ id }: { id: string }) => {
   const navigate = useNavigate();
 
@@ -324,10 +338,7 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
               </p>
               <div className="flex gap-2 justify-center md:justify-start">
                 <span className="px-3 py-1 bg-primary/20 rounded-full text-sm font-medium text-primary">
-                  Guard
-                </span>
-                <span className="px-3 py-1 bg-secondary rounded-full text-sm font-medium">
-                  #00
+                  NBA Player
                 </span>
               </div>
             </div>

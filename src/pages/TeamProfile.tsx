@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { usePlayerList, RapidApiPlayer } from '@/hooks/useNbaApi';
+import { usePlayerList, useTeamInfoByName, RapidApiPlayer } from '@/hooks/useNbaApi';
 
 const TeamProfile = () => {
   const { id } = useParams<{ id: string }>();
@@ -27,10 +27,11 @@ const TeamProfile = () => {
     enabled: !!id,
   });
 
+  // Fetch real team info from API (conference, division, logo)
+  const { data: apiTeamInfo, isLoading: apiTeamLoading } = useTeamInfoByName(team?.name || null);
+
   // Fetch roster from RapidAPI using team_id
   const { data: apiRoster, isLoading: rosterLoading } = usePlayerList(team?.team_id || null);
-
-  const isLoading = teamLoading;
 
   if (teamLoading) {
     return (
@@ -60,6 +61,11 @@ const TeamProfile = () => {
     );
   }
 
+  // Use API logo if available, otherwise fall back to DB logo
+  const teamLogo = apiTeamInfo?.teamLogo || team.logo_url;
+  const conference = apiTeamInfo?.conference || 'NBA';
+  const division = apiTeamInfo?.division || 'Division';
+
   return (
     <main className="min-h-screen bg-background">
       {/* Header */}
@@ -77,9 +83,9 @@ const TeamProfile = () => {
           {/* Team Header */}
           <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
             <div className="w-40 h-40 rounded-xl bg-white/10 p-4 flex items-center justify-center">
-              {team.logo_url ? (
+              {teamLogo ? (
                 <img 
-                  src={team.logo_url} 
+                  src={teamLogo} 
                   alt={team.name}
                   className="w-full h-full object-contain"
                 />
@@ -94,16 +100,24 @@ const TeamProfile = () => {
               <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2">
                 {team.name}
               </h1>
+              {apiTeamInfo?.teamCity && (
+                <p className="text-lg text-muted-foreground mb-2">
+                  {apiTeamInfo.teamCity}
+                </p>
+              )}
               <p className="text-xl text-muted-foreground mb-4">
                 {apiRoster?.length || 0} Players on Roster
               </p>
-              <div className="flex gap-2 justify-center md:justify-start">
+              <div className="flex gap-2 justify-center md:justify-start flex-wrap">
                 <span className="px-3 py-1 bg-primary/20 rounded-full text-sm font-medium text-primary">
-                  NBA Team
+                  {conference} Conference
                 </span>
-                {team.team_id && (
-                  <span className="px-3 py-1 bg-secondary rounded-full text-sm font-medium">
-                    ID: {team.team_id}
+                <span className="px-3 py-1 bg-secondary rounded-full text-sm font-medium">
+                  {division} Division
+                </span>
+                {apiTeamInfo?.teamAbbr && (
+                  <span className="px-3 py-1 bg-muted rounded-full text-sm font-medium">
+                    {apiTeamInfo.teamAbbr}
                   </span>
                 )}
               </div>
