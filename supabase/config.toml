@@ -1,1 +1,4 @@
 project_id = "mhekcxrveyijeelxavpe"
+
+[functions.nba-stats]
+verify_jwt = false
