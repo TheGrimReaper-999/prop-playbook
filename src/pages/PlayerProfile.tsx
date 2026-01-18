@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { usePlayerInfo, usePlayerGameLog, GameLog } from '@/hooks/useNbaApi';
+import { usePlayerInfo, usePlayerGameLog, usePlayerSplits, GameLogEntry } from '@/hooks/useNbaApi';
 import BetSlipButton from '@/components/BetSlipButton';
 import { useBetSlip } from '@/contexts/BetSlipContext';
 
@@ -45,6 +45,7 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
   const { addPlayer, removePlayer, isPlayerInSlip } = useBetSlip();
   
   const { data: playerInfo, isLoading: infoLoading } = usePlayerInfo(playerId);
+  const { data: playerStats, isLoading: statsLoading } = usePlayerSplits(playerId);
   const { data: gamelog, isLoading: gamelogLoading } = usePlayerGameLog(playerId);
 
   if (infoLoading) {
@@ -84,7 +85,7 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
   const weight = playerInfo.displayWeight || playerInfo.weight;
   const age = playerInfo.age;
 
-  const stats = playerInfo.stats || generateMockStats(name);
+  const stats = playerStats || generateMockStats(name);
   const games = gamelog && gamelog.length > 0 
     ? gamelog.slice(0, 5) 
     : generateMockGames(name);
@@ -250,7 +251,7 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {games.map((game: GameLog | ReturnType<typeof generateMockGames>[0], idx: number) => (
+                    {games.map((game: GameLogEntry | ReturnType<typeof generateMockGames>[0], idx: number) => (
                       <tr key={idx} className="border-b border-border/30 last:border-0 hover:bg-muted/30 transition-colors">
                         <td className="p-4 font-medium">{game.matchup}</td>
                         <td className="p-4 text-center">{game.pts}</td>

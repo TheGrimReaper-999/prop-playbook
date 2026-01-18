@@ -14,6 +14,7 @@ const ENDPOINTS = {
   'player-list': '/nba-player-list',           // ?teamid=13
   'player-info': '/nba-player-info',           // ?playerid=4869342
   'player-gamelog': '/nba-player-gamelog',     // ?playerid=4869342
+  'player-splits': '/nba-player-splits',       // ?playerid=4869342
   // Team division endpoints
   'teams-southwest': '/nba-southwest-team-list',
   'teams-pacific': '/nba-pacific-team-list',
@@ -52,6 +53,10 @@ serve(async (req) => {
       case 'player-gamelog':
         if (!playerId) throw new Error('playerId is required for player-gamelog');
         url = `${BASE_URL}${ENDPOINTS['player-gamelog']}?playerid=${playerId}`;
+        break;
+      case 'player-splits':
+        if (!playerId) throw new Error('playerId is required for player-splits');
+        url = `${BASE_URL}${ENDPOINTS['player-splits']}?playerid=${playerId}`;
         break;
       // Team division endpoints
       case 'teams-southwest':
