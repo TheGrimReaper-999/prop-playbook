@@ -184,6 +184,7 @@ export type Database = {
       }
       nba_players: {
         Row: {
+          api_player_id: string | null
           created_at: string
           full_name: string
           id: string
@@ -191,6 +192,7 @@ export type Database = {
           team_name: string
         }
         Insert: {
+          api_player_id?: string | null
           created_at?: string
           full_name: string
           id?: string
@@ -198,6 +200,7 @@ export type Database = {
           team_name: string
         }
         Update: {
+          api_player_id?: string | null
           created_at?: string
           full_name?: string
           id?: string
