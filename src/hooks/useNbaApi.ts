@@ -233,65 +233,70 @@ export const usePlayerGameLog = (playerId: string | null) => {
       
       if (error) throw error;
       
-      // Parse the gamelog response
-      // displayNames: ["Minutes", "FG Made-Att", "FG%", "3PT Made-Att", "3P%", "FT Made-Att", "FT%", "REB", "AST", "BLK", "STL", "PF", "TO", "PTS"]
+      // Parse the gamelog response structure:
+      // response.gamelog.events - Object with eventId keys containing game info
+      // response.gamelog.seasonTypes - Array with season data containing categories (months)
+      // Stats order: MIN(0), FG(1), FG%(2), 3PT(3), 3P%(4), FT(5), FT%(6), REB(7), AST(8), BLK(9), STL(10), PF(11), TO(12), PTS(13)
       const gamelog = data?.response?.gamelog;
-      if (!gamelog?.events) return [];
+      if (!gamelog?.events || !gamelog?.seasonTypes) return [];
       
       const events = gamelog.events;
-      const seasonCategories = gamelog.seasonCategories || [];
+      const seasonTypes = gamelog.seasonTypes || [];
       
       // Find the regular season stats
-      const regularSeason = seasonCategories.find((cat: { displayName: string }) => 
-        cat.displayName?.includes('Regular Season')
+      const regularSeason = seasonTypes.find((season: { displayName: string }) => 
+        season.displayName?.includes('Regular Season')
       );
       
-      const gameEvents = regularSeason?.categories?.find((c: { type: string }) => c.type === 'event');
+      if (!regularSeason?.categories) return [];
       
-      // Get display names for parsing stats
-      const displayNames = gamelog.displayNames || [];
+      // Collect all game events from all months
+      const allGameEvents: { eventId: string; stats: string[] }[] = [];
       
-      // Map events to GameLogEntry
+      for (const category of regularSeason.categories) {
+        if (category.type === 'event' && category.events) {
+          allGameEvents.push(...category.events);
+        }
+      }
+      
+      // Map events to GameLogEntry - take only first 10 recent games
       const entries: GameLogEntry[] = [];
       
-      if (gameEvents?.events) {
-        for (const gameEvent of gameEvents.events.slice(0, 10)) { // Limit to 10 recent games
-          const eventId = gameEvent.eventId;
-          const eventData = events[eventId];
-          const stats = gameEvent.stats || [];
+      for (const gameEvent of allGameEvents.slice(0, 10)) {
+        const eventId = gameEvent.eventId;
+        const eventData = events[eventId];
+        const stats = gameEvent.stats || [];
+        
+        if (eventData) {
+          // Stats indices: MIN(0), FG(1), FG%(2), 3PT(3), 3P%(4), FT(5), FT%(6), REB(7), AST(8), BLK(9), STL(10), PF(11), TO(12), PTS(13)
+          const fgSplit = (stats[1] || '0-0').split('-');
+          const fg3Split = (stats[3] || '0-0').split('-');
+          const ftSplit = (stats[5] || '0-0').split('-');
           
-          if (eventData) {
-            // Stats indices based on displayNames
-            // ["Minutes", "FG Made-Att", "FG%", "3PT Made-Att", "3P%", "FT Made-Att", "FT%", "REB", "AST", "BLK", "STL", "PF", "TO", "PTS"]
-            const fgSplit = (stats[1] || '0-0').split('-');
-            const fg3Split = (stats[3] || '0-0').split('-');
-            const ftSplit = (stats[5] || '0-0').split('-');
-            
-            entries.push({
-              gameId: eventId,
-              gameDate: eventData.gameDate || '',
-              matchup: `${eventData.atVs || ''} ${eventData.opponent?.abbreviation || ''}`,
-              opponent: eventData.opponent?.displayName || '',
-              opponentLogo: eventData.opponent?.logo,
-              wl: eventData.gameResult || '',
-              score: eventData.score || '',
-              min: stats[0] || '0',
-              pts: stats[13] || '0',
-              reb: stats[7] || '0',
-              ast: stats[8] || '0',
-              blk: stats[9] || '0',
-              stl: stats[10] || '0',
-              fgm: fgSplit[0] || '0',
-              fga: fgSplit[1] || '0',
-              fgPct: stats[2] || '0',
-              fg3m: fg3Split[0] || '0',
-              fg3a: fg3Split[1] || '0',
-              fg3Pct: stats[4] || '0',
-              ftm: ftSplit[0] || '0',
-              fta: ftSplit[1] || '0',
-              ftPct: stats[6] || '0',
-            });
-          }
+          entries.push({
+            gameId: eventId,
+            gameDate: eventData.gameDate || '',
+            matchup: `${eventData.atVs || ''} ${eventData.opponent?.abbreviation || ''}`,
+            opponent: eventData.opponent?.displayName || '',
+            opponentLogo: eventData.opponent?.logo,
+            wl: eventData.gameResult || '',
+            score: eventData.score || '',
+            min: stats[0] || '0',
+            pts: stats[13] || '0',
+            reb: stats[7] || '0',
+            ast: stats[8] || '0',
+            blk: stats[9] || '0',
+            stl: stats[10] || '0',
+            fgm: fgSplit[0] || '0',
+            fga: fgSplit[1] || '0',
+            fgPct: stats[2] || '0',
+            fg3m: fg3Split[0] || '0',
+            fg3a: fg3Split[1] || '0',
+            fg3Pct: stats[4] || '0',
+            ftm: ftSplit[0] || '0',
+            fta: ftSplit[1] || '0',
+            ftPct: stats[6] || '0',
+          });
         }
       }
       
