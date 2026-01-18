@@ -397,11 +397,9 @@ export const useSchedule = (gameDate?: string) => {
   return useQuery({
     queryKey: ['nba-schedule', gameDate],
     queryFn: async (): Promise<ScheduleGame[]> => {
-      // Format date as YYYYMMDD
-      const formattedDate = gameDate || new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      
+      // Let edge function handle date logic - only pass if explicitly provided
       const { data, error } = await supabase.functions.invoke('nba-stats', {
-        body: { action: 'schedule', gameDate: formattedDate }
+        body: { action: 'schedule', gameDate }
       });
       
       if (error) throw error;
