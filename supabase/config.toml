@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.bulk-populate]
 verify_jwt = false
+
+[functions.parlays]
+verify_jwt = false

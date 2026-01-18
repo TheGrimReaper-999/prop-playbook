@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt, Check, Layers, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt, Check, Layers, ChevronDown, ChevronUp, BarChart3, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -335,24 +335,37 @@ const [showNamingDialog, setShowNamingDialog] = useState(false);
     setShowNamingDialog(true);
   };
 
-  const handleConfirmSaveParlay = () => {
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleConfirmSaveParlay = async () => {
     if (pendingParlayLegs.length === 0) return;
 
-    // Save the parlay with the custom name
-    saveParlay(pendingParlayLegs, parlayName.trim() || undefined);
+    setIsSaving(true);
+    try {
+      // Save the parlay with the custom name
+      await saveParlay(pendingParlayLegs, parlayName.trim() || undefined);
 
-    toast({
-      title: "Parlay Saved!",
-      description: `${pendingParlayLegs.length} leg${pendingParlayLegs.length !== 1 ? 's' : ''} saved to your parlays.`,
-    });
+      toast({
+        title: "Parlay Saved!",
+        description: `${pendingParlayLegs.length} leg${pendingParlayLegs.length !== 1 ? 's' : ''} saved to your parlays.`,
+      });
 
-    // Reset and close dialog
-    setShowNamingDialog(false);
-    setParlayName('');
-    setPendingParlayLegs([]);
+      // Reset and close dialog
+      setShowNamingDialog(false);
+      setParlayName('');
+      setPendingParlayLegs([]);
 
-    // Navigate to parlays page
-    navigate('/parlays');
+      // Navigate to parlays page
+      navigate('/parlays');
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save parlay. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -505,11 +518,18 @@ const [showNamingDialog, setShowNamingDialog] = useState(false);
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNamingDialog(false)}>
+            <Button variant="outline" onClick={() => setShowNamingDialog(false)} disabled={isSaving}>
               Cancel
             </Button>
-            <Button onClick={handleConfirmSaveParlay}>
-              Save Parlay
+            <Button onClick={handleConfirmSaveParlay} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Parlay'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -226,6 +226,33 @@ export type Database = {
         }
         Relationships: []
       }
+      parlays: {
+        Row: {
+          created_at: string
+          id: string
+          legs: Json
+          name: string
+          updated_at: string
+          user_ip: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          legs?: Json
+          name: string
+          updated_at?: string
+          user_ip: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          legs?: Json
+          name?: string
+          updated_at?: string
+          user_ip?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
