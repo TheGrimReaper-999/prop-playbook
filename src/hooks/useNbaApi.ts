@@ -2,14 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 // Types based on RapidAPI NBA Free Data responses
-// Player list returns different field names than player info
 export interface RapidApiPlayer {
-  // API uses 'id' not 'playerId' in player list
   id?: string;
   playerId?: string;
   uid?: string;
   guid?: string;
-  // API uses 'fullName' not 'playerName'
   fullName?: string;
   playerName?: string;
   firstName?: string;
@@ -18,7 +15,6 @@ export interface RapidApiPlayer {
   team?: string;
   teamId?: string;
   pos?: string;
-  // API uses 'displayHeight' and 'displayWeight'
   height?: string;
   displayHeight?: string;
   weight?: string;
@@ -31,13 +27,11 @@ export interface RapidApiPlayer {
   draftYear?: string;
   draftRound?: string;
   draftNumber?: string;
-  // API uses 'image' not 'headShotUrl'
   image?: string;
   headShotUrl?: string;
 }
 
 export interface PlayerInfo {
-  // Support multiple field naming conventions from API
   id?: string;
   playerId?: string;
   playerName?: string;
@@ -61,35 +55,37 @@ export interface PlayerInfo {
   jersey?: string;
   team?: string;
   teamId?: string;
-  // Support multiple image field names
   image?: string;
   headShotUrl?: string;
-  stats?: {
-    ppg: string;
-    rpg: string;
-    apg: string;
-    spg: string;
-    bpg: string;
-    fgPct: string;
-    fg3Pct: string;
-    ftPct: string;
-    gamesPlayed: string;
-    min: string;
-  };
 }
 
-export interface GameLog {
+export interface PlayerStats {
+  gamesPlayed: string;
+  min: string;
+  ppg: string;
+  rpg: string;
+  apg: string;
+  spg: string;
+  bpg: string;
+  fgPct: string;
+  fg3Pct: string;
+  ftPct: string;
+}
+
+export interface GameLogEntry {
   gameId: string;
   gameDate: string;
   matchup: string;
+  opponent: string;
+  opponentLogo?: string;
   wl: string;
+  score: string;
   min: string;
   pts: string;
   reb: string;
   ast: string;
   stl: string;
   blk: string;
-  tov: string;
   fgm: string;
   fga: string;
   fgPct: string;
@@ -99,7 +95,6 @@ export interface GameLog {
   ftm: string;
   fta: string;
   ftPct: string;
-  plusMinus: string;
 }
 
 export interface RapidApiTeam {
@@ -141,12 +136,11 @@ export const usePlayerList = (teamId: number | null) => {
       
       if (error) throw error;
       
-      // Handle nested API response: response.PlayerList or direct array
       const players = data?.response?.PlayerList || data?.PlayerList || data || [];
       return players;
     },
     enabled: !!teamId && teamId > 0,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 };
 
@@ -161,8 +155,67 @@ export const usePlayerInfo = (playerId: string | null) => {
       
       if (error) throw error;
       
-      // API returns player info object or array with one player
-      return Array.isArray(data) ? data[0] : data;
+      // Parse the API response - data is in response.athlete
+      const athlete = data?.response?.athlete;
+      if (!athlete) return null;
+      
+      return {
+        id: athlete.id,
+        fullName: athlete.fullName || athlete.displayName,
+        firstName: athlete.firstName,
+        lastName: athlete.lastName,
+        displayHeight: athlete.displayHeight,
+        displayWeight: athlete.displayWeight,
+        age: athlete.age,
+        jersey: athlete.jersey,
+        pos: athlete.position?.abbreviation,
+        team: athlete.team?.displayName,
+        image: athlete.headshot?.href,
+        college: athlete.college?.name,
+        country: athlete.displayBirthPlace,
+        exp: athlete.displayExperience,
+        draftYear: athlete.displayDraft,
+      };
+    },
+    enabled: !!playerId,
+    staleTime: 5 * 60 * 1000,
+  });
+};
+
+// Fetch player splits (season stats) by player ID
+export const usePlayerSplits = (playerId: string | null) => {
+  return useQuery({
+    queryKey: ['nba-player-splits', playerId],
+    queryFn: async (): Promise<PlayerStats | null> => {
+      const { data, error } = await supabase.functions.invoke('nba-stats', {
+        body: { action: 'player-splits', playerId }
+      });
+      
+      if (error) throw error;
+      
+      // Parse the splits response
+      // labels: ["GP", "MIN", "FG", "FG%", "3PT", "3P%", "FT", "FT%", "OR", "DR", "REB", "AST", "BLK", "STL", "PF", "TO", "PTS"]
+      // stats array matches labels order
+      const splits = data?.response?.splits;
+      if (!splits) return null;
+      
+      const allSplits = splits.splitCategories?.[0]?.splits?.[0]; // "All Splits" / Total
+      if (!allSplits?.stats) return null;
+      
+      const stats = allSplits.stats;
+      // Index mapping based on labels array
+      return {
+        gamesPlayed: stats[0] || '0',
+        min: stats[1] || '0',
+        ppg: stats[16] || '0',  // PTS is last
+        rpg: stats[10] || '0',  // REB
+        apg: stats[11] || '0',  // AST
+        bpg: stats[12] || '0',  // BLK
+        spg: stats[13] || '0',  // STL
+        fgPct: stats[3] || '0', // FG%
+        fg3Pct: stats[5] || '0', // 3P%
+        ftPct: stats[7] || '0', // FT%
+      };
     },
     enabled: !!playerId,
     staleTime: 5 * 60 * 1000,
@@ -173,15 +226,76 @@ export const usePlayerInfo = (playerId: string | null) => {
 export const usePlayerGameLog = (playerId: string | null) => {
   return useQuery({
     queryKey: ['nba-player-gamelog', playerId],
-    queryFn: async (): Promise<GameLog[]> => {
+    queryFn: async (): Promise<GameLogEntry[]> => {
       const { data, error } = await supabase.functions.invoke('nba-stats', {
         body: { action: 'player-gamelog', playerId }
       });
       
       if (error) throw error;
       
-      // Return the gamelog array
-      return data?.gamelog || data || [];
+      // Parse the gamelog response
+      // displayNames: ["Minutes", "FG Made-Att", "FG%", "3PT Made-Att", "3P%", "FT Made-Att", "FT%", "REB", "AST", "BLK", "STL", "PF", "TO", "PTS"]
+      const gamelog = data?.response?.gamelog;
+      if (!gamelog?.events) return [];
+      
+      const events = gamelog.events;
+      const seasonCategories = gamelog.seasonCategories || [];
+      
+      // Find the regular season stats
+      const regularSeason = seasonCategories.find((cat: { displayName: string }) => 
+        cat.displayName?.includes('Regular Season')
+      );
+      
+      const gameEvents = regularSeason?.categories?.find((c: { type: string }) => c.type === 'event');
+      
+      // Get display names for parsing stats
+      const displayNames = gamelog.displayNames || [];
+      
+      // Map events to GameLogEntry
+      const entries: GameLogEntry[] = [];
+      
+      if (gameEvents?.events) {
+        for (const gameEvent of gameEvents.events.slice(0, 10)) { // Limit to 10 recent games
+          const eventId = gameEvent.eventId;
+          const eventData = events[eventId];
+          const stats = gameEvent.stats || [];
+          
+          if (eventData) {
+            // Stats indices based on displayNames
+            // ["Minutes", "FG Made-Att", "FG%", "3PT Made-Att", "3P%", "FT Made-Att", "FT%", "REB", "AST", "BLK", "STL", "PF", "TO", "PTS"]
+            const fgSplit = (stats[1] || '0-0').split('-');
+            const fg3Split = (stats[3] || '0-0').split('-');
+            const ftSplit = (stats[5] || '0-0').split('-');
+            
+            entries.push({
+              gameId: eventId,
+              gameDate: eventData.gameDate || '',
+              matchup: `${eventData.atVs || ''} ${eventData.opponent?.abbreviation || ''}`,
+              opponent: eventData.opponent?.displayName || '',
+              opponentLogo: eventData.opponent?.logo,
+              wl: eventData.gameResult || '',
+              score: eventData.score || '',
+              min: stats[0] || '0',
+              pts: stats[13] || '0',
+              reb: stats[7] || '0',
+              ast: stats[8] || '0',
+              blk: stats[9] || '0',
+              stl: stats[10] || '0',
+              fgm: fgSplit[0] || '0',
+              fga: fgSplit[1] || '0',
+              fgPct: stats[2] || '0',
+              fg3m: fg3Split[0] || '0',
+              fg3a: fg3Split[1] || '0',
+              fg3Pct: stats[4] || '0',
+              ftm: ftSplit[0] || '0',
+              fta: ftSplit[1] || '0',
+              ftPct: stats[6] || '0',
+            });
+          }
+        }
+      }
+      
+      return entries;
     },
     enabled: !!playerId,
     staleTime: 5 * 60 * 1000,
@@ -201,7 +315,7 @@ export const useAllNbaTeams = () => {
       
       return data || [];
     },
-    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+    staleTime: 10 * 60 * 1000,
   });
 };
 
@@ -229,7 +343,6 @@ export const useTeamInfoByName = (teamName: string | null) => {
   const teamInfo = allTeams?.reduce<(RapidApiTeam & { division?: string }) | null>((found, division) => {
     if (found) return found;
     
-    // Handle nested API response structure: teams.response.teamList or teams array
     const teamList = Array.isArray(division.teams) 
       ? division.teams 
       : division.teams?.response?.teamList || [];
