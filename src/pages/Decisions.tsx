@@ -4,7 +4,7 @@ import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt, Check, Layer
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useBetSlip, BetSlipLeg } from '@/contexts/BetSlipContext';
+import { useBetSlip, BetSlipLeg, ParlayLeg } from '@/contexts/BetSlipContext';
 import { evaluateProp, BetDecisionResult } from '@/lib/betting-utils';
 import { toast } from '@/hooks/use-toast';
 
@@ -169,7 +169,7 @@ const DecisionCard = ({ leg, result, legNumber, isSelected, onToggleSelect }: De
 
 const Decisions = () => {
   const navigate = useNavigate();
-  const { legs } = useBetSlip();
+  const { legs, saveParlay } = useBetSlip();
   const [selectedLegs, setSelectedLegs] = useState<Set<string>>(new Set());
 
   const decisions = useMemo(() => {
@@ -235,21 +235,27 @@ const Decisions = () => {
     }
 
     const selectedDecisions = decisions.filter((d) => selectedLegs.has(d.leg.legId));
-    const parlayLegs = selectedDecisions.map((d) => ({
+    const parlayLegs: ParlayLeg[] = selectedDecisions.map((d) => ({
       legId: d.leg.legId,
       player: d.leg.player,
       statType: d.leg.details.statType,
       mainLine: d.leg.details.mainLine,
       decision: d.result.decision,
+      oddsFormat: d.leg.details.oddsFormat,
+      oddsOver: d.leg.details.oddsOver,
+      oddsUnder: d.leg.details.oddsUnder,
     }));
 
-    // For now, just show a toast - parlay page can be added later
+    // Save the parlay
+    saveParlay(parlayLegs);
+
     toast({
-      title: "Added to Parlay",
-      description: `${selectedLegs.size} leg${selectedLegs.size !== 1 ? 's' : ''} added to your parlay.`,
+      title: "Parlay Saved!",
+      description: `${selectedLegs.size} leg${selectedLegs.size !== 1 ? 's' : ''} saved to your parlays.`,
     });
 
-    console.log('Parlay legs:', parlayLegs);
+    // Navigate to parlays page
+    navigate('/parlays');
   };
 
   return (
