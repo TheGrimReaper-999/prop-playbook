@@ -46,6 +46,22 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
   
   const { data: playerInfo, isLoading: infoLoading } = usePlayerInfo(playerId);
   const { data: playerStats, isLoading: statsLoading } = usePlayerSplits(playerId);
+  
+  // Lookup team by name to get team ID for navigation
+  const { data: teamData } = useQuery({
+    queryKey: ['team-by-name-api', playerInfo?.team],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('nba_teams')
+        .select('id, name')
+        .ilike('name', `%${playerInfo!.team}%`)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!playerInfo?.team,
+  });
   const { data: gamelog, isLoading: gamelogLoading } = usePlayerGameLog(playerId);
 
   if (infoLoading) {
@@ -155,7 +171,10 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
                   {inSlip ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
                 </button>
               </div>
-              <p className="text-xl text-muted-foreground mb-4">
+              <p 
+                className={`text-xl mb-4 ${teamData ? 'text-primary hover:underline cursor-pointer' : 'text-muted-foreground'}`}
+                onClick={() => teamData && navigate(`/team/${teamData.id}`)}
+              >
                 {team}
               </p>
               <div className="flex gap-2 justify-center md:justify-start flex-wrap">
