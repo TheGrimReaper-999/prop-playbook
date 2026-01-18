@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, User, Receipt, ChevronDown, ChevronUp, Plus, X, Check } from 'lucide-react';
+import { ArrowLeft, Trash2, User, Receipt, ChevronDown, ChevronUp, Plus, X, Check, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useBetSlip } from '@/contexts/BetSlipContext';
+import { useBetSlip, AltLine } from '@/contexts/BetSlipContext';
 import { toast } from '@/hooks/use-toast';
 
 const STAT_TYPES = [
@@ -43,79 +43,33 @@ const DEFAULT_LINES: Record<string, number[]> = {
 // Combo stat types that need over/under odds
 const COMBO_STATS = ['pra', 'pr', 'pa', 'ra'];
 
-interface AltLine {
-  id: string;
-  line: string;
-  odds: string;
-  oddsOver?: string;
-  oddsUnder?: string;
-}
-
-interface PlayerBetDetails {
-  statType: string;
-  mainLine: string;
-  oddsFormat: string;
-  oddsOver: string;
-  oddsUnder: string;
-  advancedMode: boolean;
-  altLines: AltLine[];
-}
-
 const BetSlip = () => {
   const navigate = useNavigate();
-  const { players, removePlayer, clearSlip } = useBetSlip();
-  const [expandedPlayers, setExpandedPlayers] = useState<Set<string>>(new Set());
-  const [betDetails, setBetDetails] = useState<Record<string, PlayerBetDetails>>({});
+  const { legs, removeLeg, duplicateLeg, updateLegDetails, clearSlip } = useBetSlip();
+  const [expandedLegs, setExpandedLegs] = useState<Set<string>>(new Set());
   const [saveStatus, setSaveStatus] = useState<Record<string, 'idle' | 'saving' | 'saved'>>({});
 
-  const toggleExpand = (playerId: string) => {
-    setExpandedPlayers(prev => {
+  const toggleExpand = (legId: string) => {
+    setExpandedLegs(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(playerId)) {
-        newSet.delete(playerId);
+      if (newSet.has(legId)) {
+        newSet.delete(legId);
       } else {
-        newSet.add(playerId);
+        newSet.add(legId);
       }
       return newSet;
     });
   };
 
-  const savePlayerDetails = useCallback((playerId: string) => {
-    setSaveStatus(prev => ({ ...prev, [playerId]: 'saving' }));
+  const saveLegDetails = useCallback((legId: string) => {
+    setSaveStatus(prev => ({ ...prev, [legId]: 'saving' }));
     setTimeout(() => {
-      setSaveStatus(prev => ({ ...prev, [playerId]: 'saved' }));
+      setSaveStatus(prev => ({ ...prev, [legId]: 'saved' }));
       setTimeout(() => {
-        setSaveStatus(prev => ({ ...prev, [playerId]: 'idle' }));
+        setSaveStatus(prev => ({ ...prev, [legId]: 'idle' }));
       }, 1500);
     }, 300);
   }, []);
-
-  const getPlayerBetDetailsFromState = (state: Record<string, PlayerBetDetails>, playerId: string): PlayerBetDetails => {
-    return state[playerId] || {
-      statType: '',
-      mainLine: '',
-      oddsFormat: 'american',
-      oddsOver: '',
-      oddsUnder: '',
-      advancedMode: false,
-      altLines: [],
-    };
-  };
-
-  const updateBetDetail = useCallback((playerId: string, field: keyof PlayerBetDetails, value: any) => {
-    setBetDetails(prev => ({
-      ...prev,
-      [playerId]: {
-        ...getPlayerBetDetailsFromState(prev, playerId),
-        [field]: value,
-      },
-    }));
-    savePlayerDetails(playerId);
-  }, [savePlayerDetails]);
-
-  const getPlayerBetDetails = (playerId: string): PlayerBetDetails => {
-    return getPlayerBetDetailsFromState(betDetails, playerId);
-  };
 
   const generateDefaultLines = (statType: string): AltLine[] => {
     const isComboStat = COMBO_STATS.includes(statType);
@@ -140,53 +94,54 @@ const BetSlip = () => {
     }));
   };
 
-  const toggleAdvancedMode = (playerId: string) => {
-    const current = getPlayerBetDetails(playerId);
+  const handleUpdateDetail = useCallback((legId: string, field: string, value: any) => {
+    updateLegDetails(legId, { [field]: value });
+    saveLegDetails(legId);
+  }, [updateLegDetails, saveLegDetails]);
+
+  const toggleAdvancedMode = (legId: string) => {
+    const leg = legs.find(l => l.legId === legId);
+    if (!leg) return;
+    
+    const current = leg.details;
     const newAdvancedMode = !current.advancedMode;
     
     if (newAdvancedMode && current.statType) {
-      // Generate default lines when enabling advanced mode
       const defaultLines = generateDefaultLines(current.statType);
-      setBetDetails(prev => ({
-        ...prev,
-        [playerId]: {
-          ...getPlayerBetDetailsFromState(prev, playerId),
-          advancedMode: true,
-          altLines: defaultLines,
-        },
-      }));
-      savePlayerDetails(playerId);
+      updateLegDetails(legId, {
+        advancedMode: true,
+        altLines: defaultLines,
+      });
+      saveLegDetails(legId);
     } else {
-      updateBetDetail(playerId, 'advancedMode', newAdvancedMode);
+      handleUpdateDetail(legId, 'advancedMode', newAdvancedMode);
     }
   };
 
-  const handleStatTypeChange = (playerId: string, statType: string) => {
-    const current = getPlayerBetDetails(playerId);
+  const handleStatTypeChange = (legId: string, statType: string) => {
+    const leg = legs.find(l => l.legId === legId);
+    if (!leg) return;
     
-    // Update stat type and regenerate lines if in advanced mode
-    if (current.advancedMode) {
+    if (leg.details.advancedMode) {
       const defaultLines = generateDefaultLines(statType);
-      setBetDetails(prev => ({
-        ...prev,
-        [playerId]: {
-          ...getPlayerBetDetailsFromState(prev, playerId),
-          statType,
-          altLines: defaultLines,
-        },
-      }));
-      savePlayerDetails(playerId);
+      updateLegDetails(legId, {
+        statType,
+        altLines: defaultLines,
+      });
+      saveLegDetails(legId);
     } else {
-      updateBetDetail(playerId, 'statType', statType);
+      handleUpdateDetail(legId, 'statType', statType);
     }
   };
 
-  const addAltLine = (playerId: string) => {
-    const current = getPlayerBetDetails(playerId);
-    const isComboStat = COMBO_STATS.includes(current.statType);
+  const addAltLine = (legId: string) => {
+    const leg = legs.find(l => l.legId === legId);
+    if (!leg) return;
+    
+    const isComboStat = COMBO_STATS.includes(leg.details.statType);
     const maxLines = isComboStat ? 5 : 10;
     
-    if (current.altLines.length >= maxLines) {
+    if (leg.details.altLines.length >= maxLines) {
       toast({
         title: "Maximum lines reached",
         description: `You can only add up to ${maxLines} lines.`,
@@ -201,32 +156,50 @@ const BetSlip = () => {
       odds: '',
       ...(isComboStat && { oddsOver: '', oddsUnder: '' }),
     };
-    updateBetDetail(playerId, 'altLines', [...current.altLines, newLine]);
+    
+    updateLegDetails(legId, { altLines: [...leg.details.altLines, newLine] });
+    saveLegDetails(legId);
   };
 
-  const removeAltLine = (playerId: string, lineId: string) => {
-    const current = getPlayerBetDetails(playerId);
-    updateBetDetail(
-      playerId, 
-      'altLines', 
-      current.altLines.filter(l => l.id !== lineId)
-    );
+  const removeAltLine = (legId: string, lineId: string) => {
+    const leg = legs.find(l => l.legId === legId);
+    if (!leg) return;
+    
+    updateLegDetails(legId, {
+      altLines: leg.details.altLines.filter(l => l.id !== lineId),
+    });
+    saveLegDetails(legId);
   };
 
-  const updateAltLine = (playerId: string, lineId: string, field: keyof AltLine, value: string) => {
-    const current = getPlayerBetDetails(playerId);
-    const updatedLines = current.altLines.map(l => 
+  const updateAltLine = (legId: string, lineId: string, field: keyof AltLine, value: string) => {
+    const leg = legs.find(l => l.legId === legId);
+    if (!leg) return;
+    
+    const updatedLines = leg.details.altLines.map(l =>
       l.id === lineId ? { ...l, [field]: value } : l
     );
-    updateBetDetail(playerId, 'altLines', updatedLines);
+    updateLegDetails(legId, { altLines: updatedLines });
+    saveLegDetails(legId);
   };
 
-  const handleManualSave = (playerId: string) => {
-    savePlayerDetails(playerId);
+  const handleManualSave = (legId: string) => {
+    saveLegDetails(legId);
     toast({
       title: "Saved",
-      description: "Player bet details saved successfully.",
+      description: "Leg details saved successfully.",
     });
+  };
+
+  const handleDuplicateLeg = (legId: string) => {
+    duplicateLeg(legId);
+    toast({
+      title: "Leg Duplicated",
+      description: "A new leg has been created for the same player.",
+    });
+  };
+
+  const handleContinue = () => {
+    navigate('/decisions');
   };
 
   return (
@@ -250,7 +223,7 @@ const BetSlip = () => {
             <div>
               <h1 className="text-4xl font-black tracking-tight">BetSlip</h1>
               <p className="text-muted-foreground">
-                {players.length} player{players.length !== 1 ? 's' : ''} selected
+                {legs.length} leg{legs.length !== 1 ? 's' : ''} in slip
               </p>
             </div>
           </div>
@@ -259,7 +232,7 @@ const BetSlip = () => {
 
       {/* Content */}
       <div className="max-w-4xl mx-auto p-6">
-        {players.length === 0 ? (
+        {legs.length === 0 ? (
           <Card className="bg-card/50 border-border/50">
             <CardContent className="p-12 text-center">
               <div className="w-20 h-20 rounded-full bg-muted mx-auto mb-4 flex items-center justify-center">
@@ -289,27 +262,31 @@ const BetSlip = () => {
               </Button>
             </div>
 
-            {/* Player list */}
+            {/* Leg list */}
             <div className="space-y-3">
-              {players.map((player) => {
-                const isExpanded = expandedPlayers.has(player.id);
-                const details = getPlayerBetDetails(player.id);
-                const status = saveStatus[player.id] || 'idle';
+              {legs.map((leg, legIndex) => {
+                const isExpanded = expandedLegs.has(leg.legId);
+                const details = leg.details;
+                const status = saveStatus[leg.legId] || 'idle';
                 const isComboStat = COMBO_STATS.includes(details.statType);
 
                 return (
                   <Card 
-                    key={player.id} 
+                    key={leg.legId} 
                     className="bg-card/50 border-border/50 hover:bg-card/80 transition-colors overflow-hidden"
                   >
                     <CardContent className="p-4">
-                      {/* Player header row */}
+                      {/* Leg header row */}
                       <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 rounded-full bg-primary/20 overflow-hidden flex-shrink-0">
-                          {player.image ? (
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20 text-primary font-bold text-sm flex-shrink-0">
+                          {legIndex + 1}
+                        </div>
+                        
+                        <div className="w-12 h-12 rounded-full bg-primary/20 overflow-hidden flex-shrink-0">
+                          {leg.player.image ? (
                             <img 
-                              src={player.image} 
-                              alt={player.name}
+                              src={leg.player.image} 
+                              alt={leg.player.name}
                               className="w-full h-full object-cover"
                               onError={(e) => {
                                 e.currentTarget.style.display = 'none';
@@ -317,14 +294,21 @@ const BetSlip = () => {
                               }}
                             />
                           ) : null}
-                          <div className={`w-full h-full flex items-center justify-center ${player.image ? 'hidden' : ''}`}>
-                            <User className="w-6 h-6 text-primary" />
+                          <div className={`w-full h-full flex items-center justify-center ${leg.player.image ? 'hidden' : ''}`}>
+                            <User className="w-5 h-5 text-primary" />
                           </div>
                         </div>
                         
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold truncate">{player.name}</h3>
-                          <p className="text-sm text-muted-foreground truncate">{player.team}</p>
+                          <h3 className="font-semibold truncate">{leg.player.name}</h3>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {leg.player.team}
+                            {details.statType && (
+                              <span className="ml-2 text-primary">
+                                • {STAT_TYPES.find(s => s.value === details.statType)?.label || details.statType}
+                              </span>
+                            )}
+                          </p>
                         </div>
 
                         {status === 'saved' && (
@@ -337,7 +321,17 @@ const BetSlip = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => toggleExpand(player.id)}
+                          onClick={() => handleDuplicateLeg(leg.legId)}
+                          className="text-muted-foreground hover:text-primary hover:bg-primary/10 flex-shrink-0"
+                          title="Duplicate leg for different stat"
+                        >
+                          <Copy className="w-5 h-5" />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => toggleExpand(leg.legId)}
                           className="text-muted-foreground hover:text-primary hover:bg-primary/10 flex-shrink-0"
                         >
                           {isExpanded ? (
@@ -350,7 +344,7 @@ const BetSlip = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => removePlayer(player.id)}
+                          onClick={() => removeLeg(leg.legId)}
                           className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
                         >
                           <Trash2 className="w-5 h-5" />
@@ -363,12 +357,12 @@ const BetSlip = () => {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {/* Stat Type */}
                             <div className="space-y-2">
-                              <Label htmlFor={`stat-${player.id}`}>Stat Type</Label>
+                              <Label htmlFor={`stat-${leg.legId}`}>Stat Type</Label>
                               <Select
                                 value={details.statType}
-                                onValueChange={(value) => handleStatTypeChange(player.id, value)}
+                                onValueChange={(value) => handleStatTypeChange(leg.legId, value)}
                               >
-                                <SelectTrigger id={`stat-${player.id}`} className="bg-background">
+                                <SelectTrigger id={`stat-${leg.legId}`} className="bg-background">
                                   <SelectValue placeholder="Select stat type" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-background">
@@ -383,26 +377,26 @@ const BetSlip = () => {
 
                             {/* Main Line */}
                             <div className="space-y-2">
-                              <Label htmlFor={`line-${player.id}`}>Main Line</Label>
+                              <Label htmlFor={`line-${leg.legId}`}>Main Line</Label>
                               <Input
-                                id={`line-${player.id}`}
+                                id={`line-${leg.legId}`}
                                 type="number"
                                 step="0.5"
                                 placeholder="e.g., 24.5"
                                 value={details.mainLine}
-                                onChange={(e) => updateBetDetail(player.id, 'mainLine', e.target.value)}
+                                onChange={(e) => handleUpdateDetail(leg.legId, 'mainLine', e.target.value)}
                                 className="bg-background"
                               />
                             </div>
 
                             {/* Odds Format */}
                             <div className="space-y-2">
-                              <Label htmlFor={`format-${player.id}`}>Odds Format</Label>
+                              <Label htmlFor={`format-${leg.legId}`}>Odds Format</Label>
                               <Select
                                 value={details.oddsFormat}
-                                onValueChange={(value) => updateBetDetail(player.id, 'oddsFormat', value)}
+                                onValueChange={(value) => handleUpdateDetail(leg.legId, 'oddsFormat', value)}
                               >
-                                <SelectTrigger id={`format-${player.id}`} className="bg-background">
+                                <SelectTrigger id={`format-${leg.legId}`} className="bg-background">
                                   <SelectValue placeholder="Select format" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-background">
@@ -417,26 +411,26 @@ const BetSlip = () => {
 
                             {/* Odds Over */}
                             <div className="space-y-2">
-                              <Label htmlFor={`over-${player.id}`}>Odds Over</Label>
+                              <Label htmlFor={`over-${leg.legId}`}>Odds Over</Label>
                               <Input
-                                id={`over-${player.id}`}
+                                id={`over-${leg.legId}`}
                                 type="text"
                                 placeholder={details.oddsFormat === 'american' ? 'e.g., -110' : 'e.g., 1.91'}
                                 value={details.oddsOver}
-                                onChange={(e) => updateBetDetail(player.id, 'oddsOver', e.target.value)}
+                                onChange={(e) => handleUpdateDetail(leg.legId, 'oddsOver', e.target.value)}
                                 className="bg-background"
                               />
                             </div>
 
                             {/* Odds Under */}
                             <div className="space-y-2 sm:col-start-2">
-                              <Label htmlFor={`under-${player.id}`}>Odds Under</Label>
+                              <Label htmlFor={`under-${leg.legId}`}>Odds Under</Label>
                               <Input
-                                id={`under-${player.id}`}
+                                id={`under-${leg.legId}`}
                                 type="text"
                                 placeholder={details.oddsFormat === 'american' ? 'e.g., -110' : 'e.g., 1.91'}
                                 value={details.oddsUnder}
-                                onChange={(e) => updateBetDetail(player.id, 'oddsUnder', e.target.value)}
+                                onChange={(e) => handleUpdateDetail(leg.legId, 'oddsUnder', e.target.value)}
                                 className="bg-background"
                               />
                             </div>
@@ -450,7 +444,7 @@ const BetSlip = () => {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => addAltLine(player.id)}
+                                  onClick={() => addAltLine(leg.legId)}
                                   className="h-7 text-xs"
                                 >
                                   <Plus className="w-3 h-3 mr-1" />
@@ -487,7 +481,7 @@ const BetSlip = () => {
                                         step="0.5"
                                         placeholder="Line"
                                         value={altLine.line}
-                                        onChange={(e) => updateAltLine(player.id, altLine.id, 'line', e.target.value)}
+                                        onChange={(e) => updateAltLine(leg.legId, altLine.id, 'line', e.target.value)}
                                         className="bg-background h-9 flex-1"
                                       />
                                       {isComboStat ? (
@@ -496,14 +490,14 @@ const BetSlip = () => {
                                             type="text"
                                             placeholder="Over"
                                             value={altLine.oddsOver || ''}
-                                            onChange={(e) => updateAltLine(player.id, altLine.id, 'oddsOver', e.target.value)}
+                                            onChange={(e) => updateAltLine(leg.legId, altLine.id, 'oddsOver', e.target.value)}
                                             className="bg-background h-9 w-20"
                                           />
                                           <Input
                                             type="text"
                                             placeholder="Under"
                                             value={altLine.oddsUnder || ''}
-                                            onChange={(e) => updateAltLine(player.id, altLine.id, 'oddsUnder', e.target.value)}
+                                            onChange={(e) => updateAltLine(leg.legId, altLine.id, 'oddsUnder', e.target.value)}
                                             className="bg-background h-9 w-20"
                                           />
                                         </>
@@ -512,14 +506,14 @@ const BetSlip = () => {
                                           type="text"
                                           placeholder="Odds"
                                           value={altLine.odds}
-                                          onChange={(e) => updateAltLine(player.id, altLine.id, 'odds', e.target.value)}
+                                          onChange={(e) => updateAltLine(leg.legId, altLine.id, 'odds', e.target.value)}
                                           className="bg-background h-9 w-24"
                                         />
                                       )}
                                       <Button
                                         variant="ghost"
                                         size="icon"
-                                        onClick={() => removeAltLine(player.id, altLine.id)}
+                                        onClick={() => removeAltLine(leg.legId, altLine.id)}
                                         className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                       >
                                         <X className="w-4 h-4" />
@@ -537,7 +531,7 @@ const BetSlip = () => {
                               variant={details.advancedMode ? "default" : "outline"}
                               size="sm"
                               className="flex-1"
-                              onClick={() => toggleAdvancedMode(player.id)}
+                              onClick={() => toggleAdvancedMode(leg.legId)}
                               disabled={!details.statType}
                             >
                               {details.advancedMode ? 'Basic Mode' : 'Advanced Mode'}
@@ -546,7 +540,7 @@ const BetSlip = () => {
                               size="sm"
                               variant="outline"
                               className="flex-1"
-                              onClick={() => handleManualSave(player.id)}
+                              onClick={() => handleManualSave(leg.legId)}
                             >
                               <Check className="w-4 h-4 mr-1" />
                               Save
@@ -570,10 +564,10 @@ const BetSlip = () => {
             <Card className="bg-primary/10 border-primary/30 mt-6">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-lg font-semibold">Total Players</span>
-                  <span className="text-2xl font-bold text-primary">{players.length}</span>
+                  <span className="text-lg font-semibold">Total Legs</span>
+                  <span className="text-2xl font-bold text-primary">{legs.length}</span>
                 </div>
-                <Button className="w-full" size="lg">
+                <Button className="w-full" size="lg" onClick={handleContinue}>
                   Continue with Selection
                 </Button>
               </CardContent>
