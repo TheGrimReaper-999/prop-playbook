@@ -2,3 +2,6 @@ project_id = "mhekcxrveyijeelxavpe"
 
 [functions.nba-stats]
 verify_jwt = false
+
+[functions.populate-players]
+verify_jwt = false
