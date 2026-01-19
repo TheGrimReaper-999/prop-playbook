@@ -208,52 +208,62 @@ export const fetchPlayerStatsFromDb = async (
   );
 };
 
-// Populate player stats via edge function and return them
-export const populateAndFetchPlayerStats = async (
+// Sync and fetch player stats using smart-sync edge function (handles API ID lookup)
+export const syncAndFetchPlayerStats = async (
   dbPlayerId: string,
-  playerName: string
+  playerName: string,
+  teamName?: string
 ): Promise<GameLogEntry[]> => {
-  // First get the API player ID
-  const apiPlayerId = await getApiPlayerIdFromDb(dbPlayerId);
-  
-  if (!apiPlayerId) {
-    console.error('Could not find API player ID for:', playerName);
+  // Get player info including team and api_player_id
+  const { data: player } = await supabase
+    .from('nba_players')
+    .select('full_name, team_name, api_player_id')
+    .eq('id', dbPlayerId)
+    .maybeSingle();
+
+  if (!player) {
+    console.error('Player not found in DB:', dbPlayerId);
     return [];
   }
 
-  // Call edge function to populate stats
-  const { data, error } = await supabase.functions.invoke('populate-stats', {
+  const team = teamName || player.team_name;
+  
+  // Call smart-sync which handles API ID lookup and stat population
+  console.log(`Syncing stats for ${player.full_name} via smart-sync...`);
+  const { data, error } = await supabase.functions.invoke('smart-sync', {
     body: {
-      action: 'populate-player-stats',
-      playerId: apiPlayerId,
-      playerName: playerName,
+      action: 'sync-player',
       dbPlayerId: dbPlayerId,
+      apiPlayerId: player.api_player_id || null,
+      playerName: player.full_name,
+      teamName: team,
     },
   });
 
   if (error) {
-    console.error('Error populating stats:', error);
-    return [];
+    console.error('Error syncing player:', error);
+    // Still try to fetch from DB in case there's cached data
+  } else {
+    console.log('Sync result:', data?.results);
   }
 
-  console.log('Populate stats result:', data);
-
   // Now fetch the stats from database
-  return fetchPlayerStatsFromDb(dbPlayerId);
+  return fetchPlayerStatsFromDb(dbPlayerId, team);
 };
 
-// Get player stats - first try DB, then populate if empty
+// Get player stats - first try DB, then sync if empty
 export const getPlayerStats = async (
   dbPlayerId: string,
-  playerName: string
+  playerName: string,
+  teamName?: string
 ): Promise<GameLogEntry[]> => {
   // Try fetching from database first
-  let stats = await fetchPlayerStatsFromDb(dbPlayerId);
+  let stats = await fetchPlayerStatsFromDb(dbPlayerId, teamName);
   
   if (stats.length === 0) {
-    // No stats in DB, need to populate
-    console.log(`No stats in DB for ${playerName}, populating...`);
-    stats = await populateAndFetchPlayerStats(dbPlayerId, playerName);
+    // No stats in DB, need to sync via smart-sync
+    console.log(`No stats in DB for ${playerName}, syncing...`);
+    stats = await syncAndFetchPlayerStats(dbPlayerId, playerName, teamName);
   }
 
   return stats;
@@ -402,7 +412,7 @@ export interface LegStats {
 }
 
 export const fetchStatsForLegs = async (
-  legs: { legId: string; player: { id: string; name: string } }[]
+  legs: { legId: string; player: { id: string; name: string; team?: string } }[]
 ): Promise<Map<string, LegStats>> => {
   const statsMap = new Map<string, LegStats>();
 
@@ -410,8 +420,8 @@ export const fetchStatsForLegs = async (
   const results = await Promise.allSettled(
     legs.map(async (leg) => {
       try {
-        // Use the new database-first approach
-        const games = await getPlayerStats(leg.player.id, leg.player.name);
+        // Use smart-sync for reliable data fetching with team info
+        const games = await getPlayerStats(leg.player.id, leg.player.name, leg.player.team);
         const statValues = extractStatValues(games);
 
         return {
