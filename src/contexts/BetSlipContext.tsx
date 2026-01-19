@@ -257,12 +257,15 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Parlay operations - now using database
   const saveParlay = useCallback(async (parlayLegs: ParlayLeg[], name?: string) => {
+    // Mark all legs as taken by default
+    const legsWithTaken = parlayLegs.map(leg => ({ ...leg, taken: leg.taken ?? true }));
+    
     try {
       const { data, error } = await supabase.functions.invoke('parlays', {
         method: 'POST',
         body: {
           name: name || `Parlay ${new Date().toLocaleDateString()}`,
-          legs: parlayLegs,
+          legs: legsWithTaken,
         },
       });
 
