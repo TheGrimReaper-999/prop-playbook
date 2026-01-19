@@ -353,6 +353,165 @@ serve(async (req) => {
       );
     }
 
+    if (action === 'sync-game-boxscore') {
+      // Sync box score for a specific completed game
+      const { eventId } = await req.json().catch(() => ({}));
+      
+      if (!eventId) {
+        throw new Error('eventId is required for sync-game-boxscore');
+      }
+
+      console.log(`Fetching box score for game ${eventId}`);
+
+      // Fetch box score from API
+      const response = await fetch(`${BASE_URL}/nba-boxscore?gameid=${eventId}`, {
+        method: 'GET',
+        headers: {
+          'x-rapidapi-host': RAPIDAPI_HOST,
+          'x-rapidapi-key': apiKey,
+        },
+      });
+
+      if (!response.ok) {
+        // If boxscore endpoint doesn't work, try to update from schedule
+        console.log('Box score endpoint failed, trying schedule endpoint');
+        
+        // Get the game from DB to find the date
+        const { data: fixtureData } = await supabase
+          .from('nba_fixtures')
+          .select('game_date')
+          .eq('event_id', eventId)
+          .single();
+
+        if (fixtureData) {
+          const gameDate = new Date(fixtureData.game_date);
+          const dateStr = gameDate.toISOString().slice(0, 10).replace(/-/g, '');
+          
+          const scheduleResponse = await fetch(`${BASE_URL}/nba-schedule-by-date?date=${dateStr}`, {
+            method: 'GET',
+            headers: {
+              'x-rapidapi-host': RAPIDAPI_HOST,
+              'x-rapidapi-key': apiKey,
+            },
+          });
+
+          if (scheduleResponse.ok) {
+            const scheduleData = await scheduleResponse.json();
+            const events = scheduleData?.response?.Events || [];
+            const gameEvent = events.find((e: any) => e.id === eventId);
+
+            if (gameEvent) {
+              const homeTeam = gameEvent.competitors?.find((c: any) => c.isHome);
+              const awayTeam = gameEvent.competitors?.find((c: any) => !c.isHome);
+
+              if (homeTeam && awayTeam) {
+                // Update fixture with latest scores
+                await supabase
+                  .from('nba_fixtures')
+                  .update({
+                    home_team_score: homeTeam.score ?? null,
+                    away_team_score: awayTeam.score ?? null,
+                    status: gameEvent.status?.state || 'scheduled',
+                    status_detail: gameEvent.status?.detail || null,
+                  })
+                  .eq('event_id', eventId);
+
+                return new Response(
+                  JSON.stringify({ 
+                    success: true, 
+                    message: 'Game updated from schedule',
+                    homeScore: homeTeam.score,
+                    awayScore: awayTeam.score,
+                    status: gameEvent.status?.state
+                  }),
+                  { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                );
+              }
+            }
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ success: false, message: 'Could not fetch game data' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const boxscoreData = await response.json();
+      const boxscore = boxscoreData?.response;
+
+      if (!boxscore) {
+        return new Response(
+          JSON.stringify({ success: true, message: 'No box score data available yet' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Parse and insert player stats from box score
+      const playerStats: PlayerStats[] = [];
+      const teams = boxscore.teams || [];
+      const gameDate = boxscore.gameDate || new Date().toISOString();
+
+      for (const team of teams) {
+        const players = team.players || [];
+        for (const player of players) {
+          if (player.stats && player.stats.length > 0) {
+            // Look up player_id from nba_players table
+            const { data: playerData } = await supabase
+              .from('nba_players')
+              .select('id')
+              .eq('api_player_id', player.id)
+              .maybeSingle();
+
+            const stats = parseGameStats(
+              eventId,
+              gameDate,
+              player.stats,
+              player.displayName || player.fullName || 'Unknown',
+              playerData?.id || null
+            );
+            playerStats.push(stats);
+          }
+        }
+      }
+
+      // Delete existing stats for this game and insert new ones
+      if (playerStats.length > 0) {
+        await supabase
+          .from('nba_player_stats')
+          .delete()
+          .eq('event_id', eventId);
+
+        const { error: insertError } = await supabase
+          .from('nba_player_stats')
+          .insert(playerStats);
+
+        if (insertError) {
+          console.error('Error inserting player stats:', insertError);
+        }
+      }
+
+      // Update fixture status
+      await supabase
+        .from('nba_fixtures')
+        .update({
+          status: boxscore.status?.state || 'post',
+          status_detail: boxscore.status?.detail || 'Final',
+          home_team_score: boxscore.homeTeamScore,
+          away_team_score: boxscore.awayTeamScore,
+        })
+        .eq('event_id', eventId);
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          statsCount: playerStats.length,
+          message: `Synced ${playerStats.length} player stats for game ${eventId}` 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     throw new Error(`Unknown action: ${action}`);
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
