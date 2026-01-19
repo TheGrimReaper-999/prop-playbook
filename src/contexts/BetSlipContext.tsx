@@ -280,9 +280,9 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteParlay = useCallback(async (parlayId: string) => {
     try {
-      const { error } = await supabase.functions.invoke('parlays', {
+      // Use query param for DELETE since body isn't reliably sent with DELETE requests
+      const { error } = await supabase.functions.invoke(`parlays?id=${parlayId}`, {
         method: 'DELETE',
-        body: { id: parlayId },
       });
 
       if (error) {
