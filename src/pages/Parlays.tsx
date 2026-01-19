@@ -13,11 +13,19 @@ const STAT_TYPE_LABELS: Record<string, string> = {
   reb: 'Rebounds',
   ast: 'Assists',
   '3pm': '3-Pointers Made',
+  stl: 'Steals',
+  blk: 'Blocks',
   pra: 'Pts + Reb + Ast',
   pr: 'Pts + Reb',
   pa: 'Pts + Ast',
   ra: 'Reb + Ast',
+  'stl+blk': 'Steals + Blocks',
 };
+
+interface LegActualValue {
+  legId: string;
+  actualValue?: number;
+}
 
 const getDecisionIcon = (decision: string) => {
   switch (decision) {
@@ -85,10 +93,11 @@ interface ParlayCardProps {
   onPnlUpdate: (id: string, pnl: number | null) => void;
   status?: ParlayStatus;
   legStatuses?: Map<string, LegStatus>;
+  legActualValues?: Map<string, number | undefined>;
   isDeleting?: boolean;
 }
 
-const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending', legStatuses, isDeleting }: ParlayCardProps) => {
+const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending', legStatuses, legActualValues, isDeleting }: ParlayCardProps) => {
   const [pnlInput, setPnlInput] = useState<string>(parlay.pnl?.toString() ?? '');
   const [isUpdatingPnl, setIsUpdatingPnl] = useState(false);
 
@@ -163,19 +172,36 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending
         <div className="space-y-2">
           {parlay.legs.map((leg, index) => {
             const legStatus = legStatuses?.get(leg.legId);
+            const actualValue = legActualValues?.get(leg.legId);
+            const hasResult = legStatus && legStatus !== 'pending';
+            
             return (
               <div
                 key={leg.legId}
-                className="flex items-center gap-3 p-3 bg-background/50 rounded-lg"
+                className={`flex items-center gap-3 p-3 rounded-lg ${
+                  legStatus === 'win' ? 'bg-green-500/10 border border-green-500/30' :
+                  legStatus === 'loss' ? 'bg-red-500/10 border border-red-500/30' :
+                  'bg-background/50'
+                }`}
               >
                 <span className="text-xs text-muted-foreground font-medium w-6">
                   #{index + 1}
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{leg.player.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {STAT_TYPE_LABELS[leg.statType] || leg.statType} • {leg.mainLine}
-                  </p>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>{STAT_TYPE_LABELS[leg.statType] || leg.statType}</span>
+                    <span>•</span>
+                    <span>Line: {leg.mainLine}</span>
+                    {hasResult && actualValue !== undefined && (
+                      <>
+                        <span>•</span>
+                        <span className={legStatus === 'win' ? 'text-green-500 font-semibold' : 'text-red-500 font-semibold'}>
+                          Actual: {actualValue}
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   {getDecisionIcon(leg.decision)}
@@ -389,7 +415,11 @@ const Parlays = () => {
               {parlays.map((parlay) => {
                 const result = parlayStatuses?.get(parlay.id);
                 const legStatusMap = new Map<string, LegStatus>();
-                result?.legResults.forEach(lr => legStatusMap.set(lr.legId, lr.status));
+                const legActualValuesMap = new Map<string, number | undefined>();
+                result?.legResults.forEach(lr => {
+                  legStatusMap.set(lr.legId, lr.status);
+                  legActualValuesMap.set(lr.legId, lr.actualValue);
+                });
                 
                 return (
                   <ParlayCard 
@@ -400,6 +430,7 @@ const Parlays = () => {
                     onPnlUpdate={handlePnlUpdate}
                     status={result?.status}
                     legStatuses={legStatusMap}
+                    legActualValues={legActualValuesMap}
                     isDeleting={isDeleting === parlay.id}
                   />
                 );
