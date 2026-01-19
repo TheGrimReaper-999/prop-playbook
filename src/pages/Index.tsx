@@ -15,7 +15,7 @@ const Index = () => {
   const displayName = profile?.display_name || user?.email?.split('@')[0] || 'User';
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-screen bg-background pb-32">
       {/* Auth buttons in top right */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
         {!loading && (
@@ -45,6 +45,11 @@ const Index = () => {
       <BetSlipOverlay />
       
       <HeroSection />
+      
+      {/* Footer */}
+      <footer className="text-center py-8 text-muted-foreground text-sm">
+        BreakingBetsLLC
+      </footer>
     </main>
   );
 };
