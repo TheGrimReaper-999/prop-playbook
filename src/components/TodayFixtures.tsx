@@ -9,8 +9,9 @@ import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-reac
 import { format, addDays, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 
-// Get today's date in Eastern Time (NBA uses ET for scheduling)
-const getTodayInET = (): Date => {
+// Get today's date string in Eastern Time (NBA uses ET for scheduling)
+// Returns YYYYMMDD format
+const getTodayETString = (): string => {
   const now = new Date();
   const etFormatter = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/New_York',
@@ -18,12 +19,19 @@ const getTodayInET = (): Date => {
     month: '2-digit',
     day: '2-digit'
   });
-  // Parse the ET date string back to a Date object
-  const [year, month, day] = etFormatter.format(now).split('-').map(Number);
-  return new Date(year, month - 1, day);
+  // en-CA gives YYYY-MM-DD format, remove dashes for API
+  return etFormatter.format(now).replace(/-/g, '');
 };
 
-// Format date for API (YYYYMMDD)
+// Parse YYYYMMDD string to Date object (for display purposes only)
+const parseApiDate = (dateStr: string): Date => {
+  const year = parseInt(dateStr.slice(0, 4));
+  const month = parseInt(dateStr.slice(4, 6)) - 1;
+  const day = parseInt(dateStr.slice(6, 8));
+  return new Date(year, month, day);
+};
+
+// Format date for API (YYYYMMDD) from Date object
 const formatDateForApi = (date: Date): string => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -47,22 +55,30 @@ const formatGameTime = (dateString: string): string => {
 };
 
 const TodayFixtures = () => {
-  const todayET = getTodayInET();
-  const [selectedDate, setSelectedDate] = useState<Date>(todayET);
+  const todayETString = getTodayETString();
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(todayETString);
   const [calendarOpen, setCalendarOpen] = useState(false);
   
-  const dateForApi = formatDateForApi(selectedDate);
-  const { data: games, isLoading, error } = useSchedule(dateForApi);
+  const { data: games, isLoading, error } = useSchedule(selectedDateStr);
 
-  const isToday = formatDateForApi(selectedDate) === formatDateForApi(todayET);
+  const isToday = selectedDateStr === todayETString;
+  
+  // For calendar display, parse the string to Date
+  const selectedDate = parseApiDate(selectedDateStr);
 
-  const goToPreviousDay = () => setSelectedDate(prev => subDays(prev, 1));
-  const goToNextDay = () => setSelectedDate(prev => addDays(prev, 1));
-  const goToToday = () => setSelectedDate(todayET);
+  const goToPreviousDay = () => {
+    const prev = subDays(selectedDate, 1);
+    setSelectedDateStr(formatDateForApi(prev));
+  };
+  const goToNextDay = () => {
+    const next = addDays(selectedDate, 1);
+    setSelectedDateStr(formatDateForApi(next));
+  };
+  const goToToday = () => setSelectedDateStr(todayETString);
 
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
-      setSelectedDate(date);
+      setSelectedDateStr(formatDateForApi(date));
       setCalendarOpen(false);
     }
   };
