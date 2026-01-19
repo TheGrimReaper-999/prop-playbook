@@ -112,7 +112,7 @@ const PlayerHeader = ({
               >
                 {inSlip ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
               </button>
-              {onRefresh && apiPlayerId && (
+              {onRefresh && (
                 <button
                   onClick={onRefresh}
                   disabled={isRefreshing}
@@ -488,7 +488,13 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
   const syncMutation = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.functions.invoke('smart-sync', {
-        body: { action: 'sync-player', apiPlayerId: apiPlayerId, dbPlayerId: id },
+        body: { 
+          action: 'sync-player', 
+          apiPlayerId: apiPlayerId, 
+          dbPlayerId: id,
+          playerName: player?.full_name,
+          teamName: player?.team_name,
+        },
       });
       if (error) throw error;
       return data;
@@ -497,8 +503,8 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
       toast.success('Player data refreshed!');
       // Invalidate queries to refetch fresh data
       queryClient.invalidateQueries({ queryKey: ['player', id] });
-      queryClient.invalidateQueries({ queryKey: ['player-gamelog', apiPlayerId] });
-      queryClient.invalidateQueries({ queryKey: ['player-splits', apiPlayerId] });
+      queryClient.invalidateQueries({ queryKey: ['player-gamelog'] });
+      queryClient.invalidateQueries({ queryKey: ['player-splits'] });
     },
     onError: (error) => {
       toast.error('Failed to refresh data: ' + (error as Error).message);

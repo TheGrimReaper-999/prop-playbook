@@ -114,12 +114,16 @@ serve(async (req) => {
     let maxApiCalls = 20; // Default per run
     let syncApiPlayerId: string | null = null;
     let syncDbPlayerId: string | null = null;
+    let syncPlayerName: string | null = null;
+    let syncTeamName: string | null = null;
     try {
       const body = await req.json();
       action = body?.action || 'full-sync';
       maxApiCalls = Math.min(body?.maxApiCalls || 20, 50);
       syncApiPlayerId = body?.apiPlayerId || null;
       syncDbPlayerId = body?.dbPlayerId || null;
+      syncPlayerName = body?.playerName || null;
+      syncTeamName = body?.teamName || null;
     } catch {
       // Use defaults
     }
@@ -137,7 +141,67 @@ serve(async (req) => {
     console.log(`Starting smart-sync with action: ${action}, budget: ${maxApiCalls} calls`);
 
     // ==================== SYNC SINGLE PLAYER ACTION ====================
-    if (action === 'sync-player' && syncApiPlayerId) {
+    if (action === 'sync-player') {
+      // If no API player ID provided, try to look it up by searching the team roster
+      if (!syncApiPlayerId && syncPlayerName && syncTeamName) {
+        console.log(`Looking up API ID for ${syncPlayerName} on ${syncTeamName}`);
+        
+        // First, find the team to get their roster
+        const { data: teamData } = await supabase
+          .from('nba_teams')
+          .select('team_id')
+          .ilike('name', `%${syncTeamName}%`)
+          .maybeSingle();
+
+        if (teamData?.team_id) {
+          try {
+            const rosterResponse = await fetch(`${BASE_URL}/nba-team-roster?teamid=${teamData.team_id}`, {
+              method: 'GET',
+              headers: {
+                'x-rapidapi-host': RAPIDAPI_HOST,
+                'x-rapidapi-key': apiKey,
+              },
+            });
+            results.apiCallsUsed++;
+
+            if (rosterResponse.ok) {
+              const rosterData = await rosterResponse.json();
+              const athletes = rosterData?.response?.team?.athletes || [];
+              
+              // Find matching player by name
+              const normalizedSearchName = normalizeName(syncPlayerName);
+              const matchedPlayer = athletes.find((p: { displayName?: string; fullName?: string }) => {
+                const playerName = p.displayName || p.fullName || '';
+                return normalizeName(playerName) === normalizedSearchName;
+              });
+
+              if (matchedPlayer?.id) {
+                syncApiPlayerId = matchedPlayer.id;
+                console.log(`Found API ID ${syncApiPlayerId} for ${syncPlayerName}`);
+                
+                // Update the player record with the API ID
+                if (syncDbPlayerId) {
+                  await supabase
+                    .from('nba_players')
+                    .update({ api_player_id: syncApiPlayerId })
+                    .eq('id', syncDbPlayerId);
+                  results.playersLinked++;
+                }
+              }
+            }
+          } catch (err) {
+            console.error(`Roster lookup failed: ${err}`);
+          }
+        }
+      }
+
+      if (!syncApiPlayerId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Could not find API player ID', results }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       console.log(`Syncing single player with API ID: ${syncApiPlayerId}`);
       
       // Look up db player id if not provided
