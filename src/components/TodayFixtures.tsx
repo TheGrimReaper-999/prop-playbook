@@ -159,14 +159,14 @@ const TodayFixtures = () => {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto mt-8 px-4">
+    <div className="w-full max-w-4xl mx-auto mt-6 sm:mt-8 px-0 sm:px-4">
       {/* Date Navigation */}
-      <div className="flex items-center justify-center gap-2 mb-4">
+      <div className="flex items-center justify-center gap-1 sm:gap-2 mb-4 flex-wrap">
         <Button 
           variant="ghost" 
           size="icon" 
           onClick={goToPreviousDay}
-          className="hover:bg-muted"
+          className="hover:bg-muted h-8 w-8 sm:h-10 sm:w-10"
         >
           <ChevronLeft className="w-4 h-4" />
         </Button>
@@ -175,13 +175,14 @@ const TodayFixtures = () => {
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
+              size="sm"
               className={cn(
-                "flex items-center gap-2 hover:bg-muted",
+                "flex items-center gap-1 sm:gap-2 hover:bg-muted px-2 sm:px-4",
                 !isToday && "text-primary"
               )}
             >
-              <CalendarIcon className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-semibold">{getDateLabel()}</h2>
+              <CalendarIcon className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+              <h2 className="text-sm sm:text-lg font-semibold">{getDateLabel()}</h2>
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="center">
@@ -199,7 +200,7 @@ const TodayFixtures = () => {
           variant="ghost" 
           size="icon" 
           onClick={goToNextDay}
-          className="hover:bg-muted"
+          className="hover:bg-muted h-8 w-8 sm:h-10 sm:w-10"
         >
           <ChevronRight className="w-4 h-4" />
         </Button>
@@ -210,7 +211,7 @@ const TodayFixtures = () => {
           size="icon"
           onClick={handleManualSync}
           disabled={isSyncing}
-          className="hover:bg-muted ml-2"
+          className="hover:bg-muted ml-1 sm:ml-2 h-8 w-8 sm:h-10 sm:w-10"
           title="Sync database with latest game data"
         >
           <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
@@ -234,36 +235,36 @@ const TodayFixtures = () => {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
           {games.map((game: ScheduleGame) => (
             <Card 
               key={game.id} 
               className="bg-card/50 border-border/30 hover:bg-card/80 transition-colors cursor-pointer"
               onClick={() => navigate(`/matchup/${game.id}`)}
             >
-              <CardContent className="p-4">
+              <CardContent className="p-2 sm:p-4">
                 {/* Status */}
-                <div className="text-xs text-center mb-3">
+                <div className="text-xs text-center mb-2 sm:mb-3">
                   {getStatusBadge(game)}
                 </div>
 
                 {/* Teams */}
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center justify-between gap-2 sm:gap-4">
                   {/* Away Team */}
-                  <div className="flex-1 text-center">
+                  <div className="flex-1 text-center min-w-0">
                     {game.awayTeam.logo && (
                       <img 
                         src={game.awayTeam.logo} 
                         alt={game.awayTeam.name}
-                        className="w-10 h-10 mx-auto mb-1 object-contain"
+                        className="w-8 h-8 sm:w-10 sm:h-10 mx-auto mb-1 object-contain"
                       />
                     )}
-                    <p className={`text-sm font-bold ${game.awayTeam.winner ? 'text-primary' : ''}`}>
+                    <p className={`text-xs sm:text-sm font-bold truncate ${game.awayTeam.winner ? 'text-primary' : ''}`}>
                       {game.awayTeam.abbreviation}
                     </p>
                     {/* Only show score if game has started (in progress or completed) */}
                     {game.status !== 'pre' && game.awayTeam.score !== undefined && (
-                      <p className={`text-xl font-black ${game.awayTeam.winner ? 'text-primary' : 'text-foreground'}`}>
+                      <p className={`text-lg sm:text-xl font-black ${game.awayTeam.winner ? 'text-primary' : 'text-foreground'}`}>
                         {game.awayTeam.score}
                       </p>
                     )}
@@ -275,20 +276,20 @@ const TodayFixtures = () => {
                   </div>
 
                   {/* Home Team */}
-                  <div className="flex-1 text-center">
+                  <div className="flex-1 text-center min-w-0">
                     {game.homeTeam.logo && (
                       <img 
                         src={game.homeTeam.logo} 
                         alt={game.homeTeam.name}
-                        className="w-10 h-10 mx-auto mb-1 object-contain"
+                        className="w-8 h-8 sm:w-10 sm:h-10 mx-auto mb-1 object-contain"
                       />
                     )}
-                    <p className={`text-sm font-bold ${game.homeTeam.winner ? 'text-primary' : ''}`}>
+                    <p className={`text-xs sm:text-sm font-bold truncate ${game.homeTeam.winner ? 'text-primary' : ''}`}>
                       {game.homeTeam.abbreviation}
                     </p>
                     {/* Only show score if game has started (in progress or completed) */}
                     {game.status !== 'pre' && game.homeTeam.score !== undefined && (
-                      <p className={`text-xl font-black ${game.homeTeam.winner ? 'text-primary' : 'text-foreground'}`}>
+                      <p className={`text-lg sm:text-xl font-black ${game.homeTeam.winner ? 'text-primary' : 'text-foreground'}`}>
                         {game.homeTeam.score}
                       </p>
                     )}
