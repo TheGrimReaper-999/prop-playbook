@@ -3,6 +3,19 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Calendar } from 'lucide-react';
 
+// Get today's date in Eastern Time (NBA uses ET for scheduling)
+const getTodayInET = (): string => {
+  const now = new Date();
+  const etFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  // en-CA gives YYYY-MM-DD format, remove dashes for API
+  return etFormatter.format(now).replace(/-/g, '');
+};
+
 // Format time to Eastern Time from ISO string (e.g., "2025-01-23T00:30Z" -> "7:30 PM ET")
 const formatGameTime = (dateString: string): string => {
   const date = new Date(dateString);
@@ -19,7 +32,9 @@ const formatGameTime = (dateString: string): string => {
 };
 
 const TodayFixtures = () => {
-  const { data: games, isLoading, error } = useSchedule();
+  // Always pass the current ET date to ensure correct "today"
+  const todayET = getTodayInET();
+  const { data: games, isLoading, error } = useSchedule(todayET);
 
   if (isLoading) {
     return (
