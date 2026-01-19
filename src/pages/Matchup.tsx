@@ -237,8 +237,8 @@ const Matchup = () => {
                         className="w-20 h-20 mx-auto mb-2 object-contain"
                       />
                     )}
-                    <p className="font-bold text-lg">{game.away_team_name}</p>
-                    <p className="text-sm text-muted-foreground">{game.away_team_abbrev}</p>
+                    <p className="font-bold text-lg">{game.away_team_name || game.away_team_abbrev}</p>
+                    {game.away_team_name && <p className="text-sm text-muted-foreground">{game.away_team_abbrev}</p>}
                     {game.away_team_score !== null && (
                       <p className="text-3xl font-black mt-2">{game.away_team_score}</p>
                     )}
@@ -255,8 +255,8 @@ const Matchup = () => {
                         className="w-20 h-20 mx-auto mb-2 object-contain"
                       />
                     )}
-                    <p className="font-bold text-lg">{game.home_team_name}</p>
-                    <p className="text-sm text-muted-foreground">{game.home_team_abbrev}</p>
+                    <p className="font-bold text-lg">{game.home_team_name || game.home_team_abbrev}</p>
+                    {game.home_team_name && <p className="text-sm text-muted-foreground">{game.home_team_abbrev}</p>}
                     {game.home_team_score !== null && (
                       <p className="text-3xl font-black mt-2">{game.home_team_score}</p>
                     )}
