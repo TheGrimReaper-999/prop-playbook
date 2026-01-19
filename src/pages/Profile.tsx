@@ -1,12 +1,13 @@
-import { useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
+import { useBetSlip } from '@/contexts/BetSlipContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Save, LogOut, User, Camera, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, LogOut, User, Camera, Loader2, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import Footer from '@/components/Footer';
 
@@ -14,17 +15,25 @@ const Profile = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading, signOut } = useAuth();
   const { profile, loading: profileLoading, updateProfile, uploadAvatar } = useProfile();
+  const { parlays } = useBetSlip();
   const [displayName, setDisplayName] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [initialized, setInitialized] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize display name when profile loads
-  if (profile && !initialized) {
+  const totalPnl = useMemo(() => parlays.reduce((sum, p) => sum + (p.pnl || 0), 0), [parlays]);
+  const trackedCount = useMemo(
+    () => parlays.filter((p) => p.pnl !== null && p.pnl !== undefined).length,
+    [parlays]
+  );
+
+  // Initialize display name once profile loads (without auto-saving)
+  useEffect(() => {
+    if (!profile) return;
+    if (isDirty) return;
     setDisplayName(profile.display_name || '');
-    setInitialized(true);
-  }
+  }, [profile, isDirty]);
 
   const handleSave = async () => {
     if (!displayName.trim()) {
@@ -157,12 +166,36 @@ const Profile = () => {
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
+            <Card className={`border-2 ${totalPnl > 0 ? 'border-green-500/50 bg-green-500/10' : totalPnl < 0 ? 'border-red-500/50 bg-red-500/10' : 'border-border/50 bg-card/50'}`}>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                    totalPnl > 0 ? 'bg-green-500/20' : totalPnl < 0 ? 'bg-red-500/20' : 'bg-muted'
+                  }`}>
+                    <DollarSign className={`w-5 h-5 ${
+                      totalPnl > 0 ? 'text-green-500' : totalPnl < 0 ? 'text-red-500' : 'text-muted-foreground'
+                    }`} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">Total P&L</p>
+                    <p className="text-xs text-muted-foreground">{trackedCount} of {parlays.length} parlays tracked</p>
+                  </div>
+                </div>
+                <span className={`text-2xl font-black ${totalPnl > 0 ? 'text-green-500' : totalPnl < 0 ? 'text-red-500' : 'text-foreground'}`}>
+                  {totalPnl > 0 ? '+' : ''}{totalPnl.toFixed(2)}
+                </span>
+              </CardContent>
+            </Card>
+
             <div className="space-y-2">
               <Label htmlFor="displayName">Display Name</Label>
               <Input
                 id="displayName"
                 value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
+                onChange={(e) => {
+                  setIsDirty(true);
+                  setDisplayName(e.target.value);
+                }}
                 placeholder="Enter your display name"
                 maxLength={50}
               />
