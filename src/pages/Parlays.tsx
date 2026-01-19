@@ -55,22 +55,22 @@ const getStatusBadge = (status: ParlayStatus) => {
   switch (status) {
     case 'win':
       return (
-        <span className="flex items-center gap-1.5 bg-green-500/20 text-green-500 px-3 py-1 rounded-full text-sm font-semibold">
-          <CheckCircle2 className="w-4 h-4" />
+        <span className="flex items-center gap-1 sm:gap-1.5 bg-green-500/20 text-green-500 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold">
+          <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           WIN
         </span>
       );
     case 'loss':
       return (
-        <span className="flex items-center gap-1.5 bg-red-500/20 text-red-500 px-3 py-1 rounded-full text-sm font-semibold">
-          <XCircle className="w-4 h-4" />
+        <span className="flex items-center gap-1 sm:gap-1.5 bg-red-500/20 text-red-500 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold">
+          <XCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           LOSS
         </span>
       );
     default:
       return (
-        <span className="flex items-center gap-1.5 bg-yellow-500/20 text-yellow-500 px-3 py-1 rounded-full text-sm font-semibold">
-          <Clock className="w-4 h-4" />
+        <span className="flex items-center gap-1 sm:gap-1.5 bg-yellow-500/20 text-yellow-500 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-semibold">
+          <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           PENDING
         </span>
       );
@@ -131,31 +131,28 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending
 
   return (
     <Card className="bg-card/50 border-border/50 hover:bg-card/80 transition-colors">
-      <CardContent className="p-6">
+      <CardContent className="p-4 sm:p-6">
         {/* Header */}
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <h3 className="font-bold text-lg">{parlay.name}</h3>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onRename(parlay.id)}
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            >
-              <Pencil className="w-4 h-4" />
-            </Button>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="bg-primary/20 text-primary px-3 py-1 rounded-full text-sm font-semibold">
-              {parlay.legs.length} Leg{parlay.legs.length !== 1 ? 's' : ''}
-            </span>
-            {getStatusBadge(status)}
+        <div className="flex flex-col gap-3 mb-4">
+          {/* Top row: Name and delete button */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <h3 className="font-bold text-base sm:text-lg truncate">{parlay.name}</h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onRename(parlay.id)}
+                className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-foreground"
+              >
+                <Pencil className="w-4 h-4" />
+              </Button>
+            </div>
             <Button
               variant="ghost"
               size="icon"
               onClick={() => onDelete(parlay.id)}
               disabled={isDeleting}
-              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              className="flex-shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
             >
               {isDeleting ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -163,6 +160,13 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending
                 <Trash2 className="w-5 h-5" />
               )}
             </Button>
+          </div>
+          {/* Bottom row: Badges */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="bg-primary/20 text-primary px-2.5 py-1 rounded-full text-xs sm:text-sm font-semibold">
+              {parlay.legs.length} Leg{parlay.legs.length !== 1 ? 's' : ''}
+            </span>
+            {getStatusBadge(status)}
           </div>
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
@@ -180,34 +184,38 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending
             return (
               <div
                 key={leg.legId}
-                className={`flex items-center gap-3 p-3 rounded-lg ${
+                className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 rounded-lg ${
                   legStatus === 'win' ? 'bg-green-500/10 border border-green-500/30' :
                   legStatus === 'loss' ? 'bg-red-500/10 border border-red-500/30' :
                   'bg-background/50'
                 }`}
               >
-                <span className="text-xs text-muted-foreground font-medium w-6">
-                  #{index + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{leg.player.name}</p>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span>{STAT_TYPE_LABELS[leg.statType] || leg.statType}</span>
-                    <span>•</span>
-                    <span>Line: {leg.mainLine}</span>
-                    {hasResult && actualValue !== undefined && (
-                      <>
-                        <span>•</span>
-                        <span className={legStatus === 'win' ? 'text-green-500 font-semibold' : 'text-red-500 font-semibold'}>
-                          Actual: {actualValue}
-                        </span>
-                      </>
-                    )}
+                {/* Top row on mobile: index + player name */}
+                <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                  <span className="text-xs text-muted-foreground font-medium w-5 sm:w-6 flex-shrink-0">
+                    #{index + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm sm:text-base">{leg.player.name}</p>
+                    <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
+                      <span>{STAT_TYPE_LABELS[leg.statType] || leg.statType}</span>
+                      <span>•</span>
+                      <span>Line: {leg.mainLine}</span>
+                      {hasResult && actualValue !== undefined && (
+                        <>
+                          <span>•</span>
+                          <span className={legStatus === 'win' ? 'text-green-500 font-semibold' : 'text-red-500 font-semibold'}>
+                            Actual: {actualValue}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                {/* Decision + status */}
+                <div className="flex items-center gap-2 pl-7 sm:pl-0">
                   {getDecisionIcon(leg.decision)}
-                  <span className={`text-sm font-semibold ${getDecisionColor(leg.decision)}`}>
+                  <span className={`text-xs sm:text-sm font-semibold whitespace-nowrap ${getDecisionColor(leg.decision)}`}>
                     {leg.decision}
                   </span>
                   {legStatus && getLegStatusIcon(legStatus)}
