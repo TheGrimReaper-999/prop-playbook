@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Check, ChevronRight } from 'lucide-react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { ArrowLeft, Plus, Check, ChevronRight, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,7 +27,10 @@ interface PlayerHeaderProps {
   exp?: string | null;
   draftInfo?: string | null;
   playerId: string;
+  apiPlayerId?: string | null;
   onNavigateTeam?: () => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 const PlayerHeader = ({
@@ -43,7 +47,10 @@ const PlayerHeader = ({
   exp,
   draftInfo,
   playerId,
+  apiPlayerId,
   onNavigateTeam,
+  onRefresh,
+  isRefreshing,
 }: PlayerHeaderProps) => {
   const navigate = useNavigate();
   const { addPlayer, removePlayer, isPlayerInSlip } = useBetSlip();
@@ -105,6 +112,16 @@ const PlayerHeader = ({
               >
                 {inSlip ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
               </button>
+              {onRefresh && apiPlayerId && (
+                <button
+                  onClick={onRefresh}
+                  disabled={isRefreshing}
+                  className="w-10 h-10 rounded-full flex items-center justify-center transition-all bg-muted hover:bg-primary hover:text-primary-foreground disabled:opacity-50"
+                  title="Refresh player data"
+                >
+                  <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                </button>
+              )}
             </div>
             {team && (
               <p 
@@ -317,10 +334,31 @@ const RecentGames = ({ games, isLoading }: RecentGamesProps) => {
 // API Player Profile (from team roster click)
 const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   
   const { data: playerInfo, isLoading: infoLoading } = usePlayerInfo(playerId);
   const { data: playerStats, isLoading: statsLoading } = usePlayerSplits(playerId);
   const { data: gamelog, isLoading: gamelogLoading } = usePlayerGameLog(playerId);
+
+  // Mutation to sync player data
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('smart-sync', {
+        body: { action: 'sync-player', apiPlayerId: playerId },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Player data refreshed!');
+      // Invalidate queries to refetch fresh data
+      queryClient.invalidateQueries({ queryKey: ['player-gamelog', playerId] });
+      queryClient.invalidateQueries({ queryKey: ['player-splits', playerId] });
+    },
+    onError: (error) => {
+      toast.error('Failed to refresh data: ' + (error as Error).message);
+    },
+  });
   
   // Lookup team by name to get team ID for navigation
   const { data: teamData } = useQuery({
@@ -388,7 +426,10 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
         exp={playerInfo.exp}
         draftInfo={draftInfo}
         playerId={playerId}
+        apiPlayerId={playerId}
         onNavigateTeam={teamData ? () => navigate(`/team/${teamData.id}`) : undefined}
+        onRefresh={() => syncMutation.mutate()}
+        isRefreshing={syncMutation.isPending}
       />
 
       <div className="max-w-6xl mx-auto p-6">
@@ -406,6 +447,7 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
 // If player has api_player_id, fetch real API data
 const DbPlayerProfile = ({ id }: { id: string }) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const { data: player, isLoading } = useQuery({
     queryKey: ['player', id],
@@ -441,6 +483,27 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
   const apiPlayerId = player?.api_player_id;
   const { data: playerStats, isLoading: statsLoading } = usePlayerSplits(apiPlayerId || null);
   const { data: gamelog, isLoading: gamelogLoading } = usePlayerGameLog(apiPlayerId || null);
+
+  // Mutation to sync player data
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('smart-sync', {
+        body: { action: 'sync-player', apiPlayerId: apiPlayerId, dbPlayerId: id },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Player data refreshed!');
+      // Invalidate queries to refetch fresh data
+      queryClient.invalidateQueries({ queryKey: ['player', id] });
+      queryClient.invalidateQueries({ queryKey: ['player-gamelog', apiPlayerId] });
+      queryClient.invalidateQueries({ queryKey: ['player-splits', apiPlayerId] });
+    },
+    onError: (error) => {
+      toast.error('Failed to refresh data: ' + (error as Error).message);
+    },
+  });
 
   if (isLoading) {
     return (
@@ -480,7 +543,10 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
         image={player.image_url}
         team={player.team_name}
         playerId={id}
+        apiPlayerId={apiPlayerId}
         onNavigateTeam={team ? () => navigate(`/team/${team.id}`) : undefined}
+        onRefresh={() => syncMutation.mutate()}
+        isRefreshing={syncMutation.isPending}
       />
 
       <div className="max-w-6xl mx-auto p-6">

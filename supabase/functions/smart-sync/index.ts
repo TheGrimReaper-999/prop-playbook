@@ -112,10 +112,14 @@ serve(async (req) => {
     // Parse action from body
     let action = 'full-sync';
     let maxApiCalls = 20; // Default per run
+    let syncApiPlayerId: string | null = null;
+    let syncDbPlayerId: string | null = null;
     try {
       const body = await req.json();
       action = body?.action || 'full-sync';
       maxApiCalls = Math.min(body?.maxApiCalls || 20, 50);
+      syncApiPlayerId = body?.apiPlayerId || null;
+      syncDbPlayerId = body?.dbPlayerId || null;
     } catch {
       // Use defaults
     }
@@ -131,6 +135,116 @@ serve(async (req) => {
     };
 
     console.log(`Starting smart-sync with action: ${action}, budget: ${maxApiCalls} calls`);
+
+    // ==================== SYNC SINGLE PLAYER ACTION ====================
+    if (action === 'sync-player' && syncApiPlayerId) {
+      console.log(`Syncing single player with API ID: ${syncApiPlayerId}`);
+      
+      // Look up db player id if not provided
+      let dbPlayerId = syncDbPlayerId;
+      if (!dbPlayerId) {
+        const { data: playerData } = await supabase
+          .from('nba_players')
+          .select('id')
+          .eq('api_player_id', syncApiPlayerId)
+          .maybeSingle();
+        dbPlayerId = playerData?.id || null;
+      }
+
+      try {
+        const response = await fetch(`${BASE_URL}/nba-player-gamelog?playerid=${syncApiPlayerId}`, {
+          method: 'GET',
+          headers: {
+            'x-rapidapi-host': RAPIDAPI_HOST,
+            'x-rapidapi-key': apiKey,
+          },
+        });
+        results.apiCallsUsed++;
+
+        if (response.ok) {
+          const gamelogData = await response.json();
+          const gamelog = gamelogData?.response?.gamelog;
+
+          if (gamelog?.events && gamelog?.seasonTypes) {
+            const events = gamelog.events;
+            const regularSeason = gamelog.seasonTypes?.find(
+              (s: { displayName: string }) => s.displayName?.includes('Regular Season')
+            );
+
+            // Get player name from gamelog info
+            const playerName = gamelog.info?.displayName || 'Unknown Player';
+
+            if (regularSeason?.categories) {
+              const allStats: PlayerStats[] = [];
+
+              for (const category of regularSeason.categories) {
+                if (category.type === 'event' && category.events) {
+                  for (const gameEvent of category.events) {
+                    const eventId = gameEvent.eventId;
+                    const eventData = events[eventId];
+
+                    if (eventData && gameEvent.stats) {
+                      const isHome = eventData.homeTeamId === eventData.team?.id;
+
+                      await supabase.from('nba_fixtures').upsert({
+                        event_id: eventId,
+                        game_date: eventData.gameDate,
+                        home_team_id: eventData.homeTeamId || '',
+                        home_team_name: isHome ? eventData.team?.displayName || '' : eventData.opponent?.displayName || '',
+                        home_team_abbrev: isHome ? eventData.team?.abbreviation || '' : eventData.opponent?.abbreviation || '',
+                        home_team_logo: isHome ? eventData.team?.logo : eventData.opponent?.logo,
+                        home_team_score: parseInt(eventData.homeTeamScore || '0', 10),
+                        away_team_id: eventData.awayTeamId || '',
+                        away_team_name: !isHome ? eventData.team?.displayName || '' : eventData.opponent?.displayName || '',
+                        away_team_abbrev: !isHome ? eventData.team?.abbreviation || '' : eventData.opponent?.abbreviation || '',
+                        away_team_logo: !isHome ? eventData.team?.logo : eventData.opponent?.logo,
+                        away_team_score: parseInt(eventData.awayTeamScore || '0', 10),
+                        status: 'post',
+                        status_detail: eventData.score || 'Final',
+                        season: '2025-26',
+                      }, { onConflict: 'event_id' });
+
+                      const stats = parseGameStats(
+                        eventId,
+                        eventData.gameDate,
+                        gameEvent.stats,
+                        playerName,
+                        dbPlayerId
+                      );
+                      allStats.push(stats);
+                    }
+                  }
+                }
+              }
+
+              if (allStats.length > 0 && dbPlayerId) {
+                await supabase
+                  .from('nba_player_stats')
+                  .delete()
+                  .eq('player_id', dbPlayerId);
+
+                await supabase
+                  .from('nba_player_stats')
+                  .insert(allStats);
+
+                results.playerStatsAdded = allStats.length;
+                results.boxscoresSynced = 1;
+                console.log(`Synced ${allStats.length} stats for player`);
+              }
+            }
+          }
+        } else {
+          results.errors.push(`API request failed: ${response.status}`);
+        }
+      } catch (err) {
+        results.errors.push(`Sync failed: ${String(err)}`);
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, results }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // ==================== PHASE 1: SYNC SCHEDULES (3 API calls) ====================
     if (action === 'full-sync' || action === 'schedule-sync') {
