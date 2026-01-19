@@ -1,5 +1,6 @@
 import HeroSection from '@/components/HeroSection';
-import BetSlipButton from '@/components/BetSlipButton';
+import NavButtons from '@/components/NavButtons';
+import BetSlipOverlay from '@/components/BetSlipOverlay';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { LogIn, LogOut, User } from 'lucide-react';
@@ -39,20 +40,26 @@ const Index = () => {
                   {user.email}
                 </span>
               </div>
-              <Button variant="outline" size="sm" onClick={handleSignOut}>
+              <Button variant="outline" size="sm" onClick={handleSignOut} className="bg-background/80 backdrop-blur-sm">
                 <LogOut className="w-4 h-4 mr-2" />
                 Sign Out
               </Button>
             </div>
           ) : (
-            <Button onClick={() => navigate('/auth')} size="sm">
+            <Button onClick={() => navigate('/auth')} size="sm" className="shadow-lg">
               <LogIn className="w-4 h-4 mr-2" />
               Sign In
             </Button>
           )
         )}
       </div>
-      <BetSlipButton showSearch={false} />
+      
+      {/* Nav buttons - search and parlays (left side) */}
+      <NavButtons showSearch={false} />
+      
+      {/* BetSlip floating button and overlay */}
+      <BetSlipOverlay />
+      
       <HeroSection />
     </main>
   );

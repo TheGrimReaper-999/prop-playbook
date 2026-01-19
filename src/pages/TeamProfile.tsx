@@ -7,7 +7,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePlayerList, useTeamInfoByName, RapidApiPlayer } from '@/hooks/useNbaApi';
 import { useBetSlip } from '@/contexts/BetSlipContext';
-import BetSlipButton from '@/components/BetSlipButton';
+import NavButtons from '@/components/NavButtons';
+import BetSlipOverlay from '@/components/BetSlipOverlay';
 
 const TeamProfile = () => {
   const { id } = useParams<{ id: string }>();
@@ -93,8 +94,9 @@ const TeamProfile = () => {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* BetSlip Button */}
-      <BetSlipButton />
+      {/* Nav and BetSlip */}
+      <NavButtons />
+      <BetSlipOverlay />
 
       {/* Header */}
       <div className="bg-gradient-to-b from-primary/20 to-background p-6">

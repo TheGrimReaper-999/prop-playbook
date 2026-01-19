@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePlayerInfo, usePlayerGameLog, usePlayerSplits, GameLogEntry } from '@/hooks/useNbaApi';
-import BetSlipButton from '@/components/BetSlipButton';
+import NavButtons from '@/components/NavButtons';
+import BetSlipOverlay from '@/components/BetSlipOverlay';
 import { useBetSlip } from '@/contexts/BetSlipContext';
 
 // Fallback mock stats generator when API doesn't return data
@@ -123,8 +124,9 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* BetSlip Button */}
-      <BetSlipButton />
+      {/* Nav and BetSlip */}
+      <NavButtons />
+      <BetSlipOverlay />
 
       {/* Header */}
       <div className="bg-gradient-to-b from-primary/20 to-background p-6">
@@ -380,8 +382,9 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
 
   return (
     <main className="min-h-screen bg-background">
-      {/* BetSlip Button */}
-      <BetSlipButton />
+      {/* Nav and BetSlip */}
+      <NavButtons />
+      <BetSlipOverlay />
 
       {/* Header */}
       <div className="bg-gradient-to-b from-primary/20 to-background p-6">
