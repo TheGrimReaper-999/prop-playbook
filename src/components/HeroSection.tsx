@@ -19,7 +19,7 @@ const HeroSection = () => {
   };
 
   return (
-    <section className="relative flex flex-col items-center justify-start pt-24 px-6 pb-8 overflow-hidden">
+    <section className="relative flex flex-col items-center justify-start pt-20 sm:pt-24 px-4 sm:px-6 pb-8 overflow-hidden">
       {/* Background gradient overlay */}
       <div 
         className="absolute inset-0 z-0"
@@ -32,20 +32,22 @@ const HeroSection = () => {
       {/* Content */}
       <div className="relative z-10 text-center max-w-4xl mx-auto w-full">
         {/* Main Title */}
-        <h1 className="hero-title mb-4">
+        <h1 className="hero-title mb-2 sm:mb-4">
           PROP <span className="text-primary">DECISION</span>
         </h1>
         
         {/* Subtitle */}
-        <p className="subtitle mb-12">
+        <p className="subtitle mb-8 sm:mb-12 px-2">
           AI-Powered <span className="accent-text">NBA Player Prop</span> Analysis & Predictions
         </p>
         
         {/* Search Bar */}
-        <SearchBar onSearch={handleSearch} onSelect={handleSelect} />
+        <div className="px-2 sm:px-0">
+          <SearchBar onSearch={handleSearch} onSelect={handleSelect} />
+        </div>
         
         {/* Helper text */}
-        <p className="text-muted-foreground text-sm mt-6">
+        <p className="text-muted-foreground text-xs sm:text-sm mt-4 sm:mt-6 px-2">
           Enter a player name like <span className="text-foreground/80">"LeBron James"</span> or team like <span className="text-foreground/80">"Lakers"</span>
         </p>
 
