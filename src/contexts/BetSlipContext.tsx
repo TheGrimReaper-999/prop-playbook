@@ -73,7 +73,7 @@ interface BetSlipContextType {
   clearSlip: () => void;
   // Legacy support for player-based operations
   players: BetSlipPlayer[];
-  removePlayer: (id: string) => void;
+  removePlayer: (id: string, name?: string) => void;
   // Parlay operations
   parlays: SavedParlay[];
   parlaysLoading: boolean;
@@ -245,9 +245,12 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return Array.from(uniquePlayers.values());
   }, [legs]);
 
-  // Legacy support: remove all legs for a player
-  const removePlayer = useCallback((id: string) => {
-    setLegs((prev) => prev.filter((leg) => leg.player.id !== id));
+  // Legacy support: remove all legs for a player (by ID or name)
+  const removePlayer = useCallback((id: string, name?: string) => {
+    setLegs((prev) => prev.filter((leg) => 
+      leg.player.id !== id && 
+      !(name && leg.player.name.toLowerCase() === name.toLowerCase())
+    ));
   }, []);
 
   // Parlay operations - now using database
