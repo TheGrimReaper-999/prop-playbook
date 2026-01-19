@@ -262,53 +262,14 @@ const Parlays = () => {
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
 
-  // Show auth prompt if not logged in
-  if (!authLoading && !user) {
-    return (
-      <main className="min-h-screen bg-background">
-        <div className="bg-gradient-to-b from-primary/20 to-background p-6">
-          <div className="max-w-4xl mx-auto">
-            <Button
-              variant="ghost"
-              onClick={() => navigate('/')}
-              className="mb-6 hover:bg-primary/10"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Home
-            </Button>
+  // Calculate total PnL - must be before early returns
+  const totalPnl = useMemo(() => {
+    return parlays.reduce((sum, p) => sum + (p.pnl || 0), 0);
+  }, [parlays]);
 
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-xl bg-primary/20 flex items-center justify-center">
-                <Layers className="w-8 h-8 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-4xl font-black tracking-tight">Parlays</h1>
-                <p className="text-muted-foreground">Sign in to save your parlays</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="max-w-4xl mx-auto p-6">
-          <Card className="bg-card/50 border-border/50">
-            <CardContent className="p-12 text-center">
-              <div className="w-20 h-20 rounded-full bg-primary/20 mx-auto mb-4 flex items-center justify-center">
-                <LogIn className="w-10 h-10 text-primary" />
-              </div>
-              <h2 className="text-xl font-semibold mb-2">Sign in required</h2>
-              <p className="text-muted-foreground mb-6">
-                Create an account or sign in to save and track your parlays
-              </p>
-              <Button onClick={() => navigate('/auth')} size="lg">
-                <LogIn className="w-4 h-4 mr-2" />
-                Sign In / Sign Up
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </main>
-    );
-  }
+  const parlaysWithPnl = useMemo(() => {
+    return parlays.filter(p => p.pnl !== null && p.pnl !== undefined);
+  }, [parlays]);
 
   const handleClearAll = () => {
     if (parlays.length === 0) return;
@@ -359,14 +320,53 @@ const Parlays = () => {
     }
   };
 
-  // Calculate total PnL
-  const totalPnl = useMemo(() => {
-    return parlays.reduce((sum, p) => sum + (p.pnl || 0), 0);
-  }, [parlays]);
+  // Show auth prompt if not logged in - AFTER all hooks
+  if (!authLoading && !user) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="bg-gradient-to-b from-primary/20 to-background p-6">
+          <div className="max-w-4xl mx-auto">
+            <Button
+              variant="ghost"
+              onClick={() => navigate('/')}
+              className="mb-6 hover:bg-primary/10"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Home
+            </Button>
 
-  const parlaysWithPnl = useMemo(() => {
-    return parlays.filter(p => p.pnl !== null && p.pnl !== undefined);
-  }, [parlays]);
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-xl bg-primary/20 flex items-center justify-center">
+                <Layers className="w-8 h-8 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-4xl font-black tracking-tight">Parlays</h1>
+                <p className="text-muted-foreground">Sign in to save your parlays</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto p-6">
+          <Card className="bg-card/50 border-border/50">
+            <CardContent className="p-12 text-center">
+              <div className="w-20 h-20 rounded-full bg-primary/20 mx-auto mb-4 flex items-center justify-center">
+                <LogIn className="w-10 h-10 text-primary" />
+              </div>
+              <h2 className="text-xl font-semibold mb-2">Sign in required</h2>
+              <p className="text-muted-foreground mb-6">
+                Create an account or sign in to save and track your parlays
+              </p>
+              <Button onClick={() => navigate('/auth')} size="lg">
+                <LogIn className="w-4 h-4 mr-2" />
+                Sign In / Sign Up
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    );
+  }
 
   const handleConfirmRename = async () => {
     if (renamingParlayId && newParlayName.trim()) {
