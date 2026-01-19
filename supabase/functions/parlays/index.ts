@@ -116,6 +116,7 @@ Deno.serve(async (req) => {
       const updateData: Record<string, unknown> = {};
       if (name !== undefined) updateData.name = name;
       if (legs !== undefined) updateData.legs = legs;
+      if (body.pnl !== undefined) updateData.pnl = body.pnl;
 
       const { data, error } = await supabase
         .from('parlays')

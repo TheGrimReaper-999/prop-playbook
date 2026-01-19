@@ -57,6 +57,7 @@ export interface SavedParlay {
   name: string;
   legs: ParlayLeg[];
   createdAt: string;
+  pnl?: number | null;
 }
 
 interface BetSlipContextType {
@@ -78,6 +79,7 @@ interface BetSlipContextType {
   saveParlay: (legs: ParlayLeg[], name?: string) => Promise<void>;
   deleteParlay: (parlayId: string) => Promise<void>;
   renameParlay: (parlayId: string, newName: string) => Promise<void>;
+  updateParlayPnl: (parlayId: string, pnl: number | null) => Promise<void>;
   clearParlays: () => void;
   refreshParlays: () => Promise<void>;
 }
@@ -119,11 +121,13 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
         name: string;
         legs: ParlayLeg[];
         created_at: string;
+        pnl?: number | null;
       }) => ({
         id: p.id,
         name: p.name,
         legs: p.legs as ParlayLeg[],
         createdAt: p.created_at,
+        pnl: p.pnl,
       }));
 
       setParlays(transformedParlays);
@@ -289,6 +293,27 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
+  const updateParlayPnl = useCallback(async (parlayId: string, pnl: number | null) => {
+    try {
+      const { error } = await supabase.functions.invoke('parlays', {
+        method: 'PUT',
+        body: { id: parlayId, pnl },
+      });
+
+      if (error) {
+        console.error('Error updating parlay PnL:', error);
+        throw error;
+      }
+
+      setParlays((prev) =>
+        prev.map((p) => (p.id === parlayId ? { ...p, pnl } : p))
+      );
+    } catch (err) {
+      console.error('Error updating parlay PnL:', err);
+      throw err;
+    }
+  }, []);
+
   const clearParlays = useCallback(() => {
     setParlays([]);
   }, []);
@@ -312,6 +337,7 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
         saveParlay,
         deleteParlay,
         renameParlay,
+        updateParlayPnl,
         clearParlays,
         refreshParlays: fetchParlays,
       }}
