@@ -47,8 +47,15 @@ const Index = () => {
       <HeroSection />
       
       {/* Footer */}
-      <footer className="text-center py-8 text-muted-foreground text-sm">
-        BreakingBetsLLC
+      <footer className="text-center py-8 text-muted-foreground text-sm space-y-2">
+        <div className="flex justify-center gap-4">
+          <a href="#" className="hover:text-foreground transition-colors">Privacy Policy</a>
+          <span>•</span>
+          <a href="#" className="hover:text-foreground transition-colors">Terms of Service</a>
+          <span>•</span>
+          <a href="#" className="hover:text-foreground transition-colors">Contact</a>
+        </div>
+        <p>© {new Date().getFullYear()} BreakingBetsLLC. All rights reserved.</p>
       </footer>
     </main>
   );

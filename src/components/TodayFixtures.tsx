@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSchedule, ScheduleGame } from '@/hooks/useNbaApi';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -51,6 +52,7 @@ const formatGameTime = (dateString: string): string => {
 };
 
 const TodayFixtures = () => {
+  const navigate = useNavigate();
   const todayString = getTodayString();
   const [selectedDateStr, setSelectedDateStr] = useState<string>(todayString);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -199,7 +201,8 @@ const TodayFixtures = () => {
           {games.map((game: ScheduleGame) => (
             <Card 
               key={game.id} 
-              className="bg-card/50 border-border/30 hover:bg-card/80 transition-colors"
+              className="bg-card/50 border-border/30 hover:bg-card/80 transition-colors cursor-pointer"
+              onClick={() => navigate(`/matchup/${game.id}`)}
             >
               <CardContent className="p-4">
                 {/* Status */}
