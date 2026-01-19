@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { Button } from '@/components/ui/button';
 import { LogIn, User } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 const Index = () => {
   const { user, loading } = useAuth();
@@ -49,13 +49,13 @@ const Index = () => {
       {/* Footer */}
       <footer className="text-center py-8 text-muted-foreground text-sm space-y-2">
         <div className="flex justify-center gap-4">
-          <a href="#" className="hover:text-foreground transition-colors">Privacy Policy</a>
+          <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
           <span>•</span>
-          <a href="#" className="hover:text-foreground transition-colors">Terms of Service</a>
+          <Link to="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
           <span>•</span>
-          <a href="#" className="hover:text-foreground transition-colors">Contact</a>
+          <Link to="/contact" className="hover:text-foreground transition-colors">Contact</Link>
         </div>
-        <p>© {new Date().getFullYear()} BreakingBetsLLC. All rights reserved.</p>
+        <p>© {new Date().getFullYear()} BreakingBets LLC. All rights reserved.</p>
       </footer>
     </main>
   );
