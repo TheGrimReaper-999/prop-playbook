@@ -206,11 +206,14 @@ const Matchup = () => {
   const navigate = useNavigate();
   const [hasSynced, setHasSynced] = useState(false);
   
+  // Guard against missing eventId
+  const validEventId = eventId || '';
+  
   // Live API data for scores/status (same source as home page)
-  const { data: liveGame, isLoading: liveLoading } = useLiveGameData(eventId || '');
+  const { data: liveGame, isLoading: liveLoading } = useLiveGameData(validEventId);
   // DB data for additional metadata (venue city/state) and fallback
-  const { data: dbGame, isLoading: dbLoading, refetch: refetchGame } = useGameDetails(eventId || '');
-  const { data: playerStats, isLoading: statsLoading, refetch: refetchStats } = useGamePlayerStats(eventId || '');
+  const { data: dbGame, isLoading: dbLoading, refetch: refetchGame } = useGameDetails(validEventId);
+  const { data: playerStats, isLoading: statsLoading, refetch: refetchStats } = useGamePlayerStats(validEventId);
   const syncMutation = useSyncGameStats();
 
   // Use live data for scores/status, fall back to DB for everything else
@@ -219,10 +222,11 @@ const Matchup = () => {
 
   // Auto-sync if game is completed but no stats available
   useEffect(() => {
+    if (!validEventId) return;
     const isCompleted = gameStatus === 'post' || statusDetail.includes('Final');
     if ((liveGame || dbGame) && !hasSynced && isCompleted && (!playerStats || playerStats.length === 0) && !statsLoading) {
       setHasSynced(true);
-      syncMutation.mutate(eventId || '', {
+      syncMutation.mutate(validEventId, {
         onSuccess: () => {
           toast.success('Game stats synced!');
         },
@@ -231,11 +235,11 @@ const Matchup = () => {
         }
       });
     }
-  }, [liveGame, dbGame, playerStats, statsLoading, hasSynced, eventId, syncMutation, gameStatus, statusDetail]);
+  }, [liveGame, dbGame, playerStats, statsLoading, hasSynced, validEventId, syncMutation, gameStatus, statusDetail]);
 
   const handleManualSync = () => {
-    if (eventId) {
-      syncMutation.mutate(eventId, {
+    if (validEventId) {
+      syncMutation.mutate(validEventId, {
         onSuccess: (data) => {
           toast.success(data?.message || 'Game synced!');
           refetchGame();
@@ -247,6 +251,31 @@ const Matchup = () => {
       });
     }
   };
+
+  // Show error state if no eventId
+  if (!eventId) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <div className="max-w-4xl mx-auto p-4 flex-1">
+          <Button 
+            variant="ghost" 
+            onClick={() => navigate('/')}
+            className="mb-6"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Games
+          </Button>
+          <Card className="bg-card/30 border-border/30">
+            <CardContent className="p-8 text-center text-muted-foreground">
+              <p>Invalid game ID.</p>
+              <Button onClick={() => navigate('/')} className="mt-4">Go Home</Button>
+            </CardContent>
+          </Card>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
 
   const isLoading = liveLoading && dbLoading;
 

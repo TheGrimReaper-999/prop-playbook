@@ -613,16 +613,29 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
 // Main Player Profile component
 const PlayerProfile = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  
+  // Guard against missing id
+  if (!id) {
+    return (
+      <main className="min-h-screen bg-background p-6 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Invalid Player ID</h1>
+          <Button onClick={() => navigate('/')}>Go Home</Button>
+        </div>
+      </main>
+    );
+  }
   
   // API players have route /player/api/:playerId
   // DB players have route /player/:uuid
   const isApiPlayer = window.location.pathname.includes('/player/api/');
   
-  if (isApiPlayer && id) {
+  if (isApiPlayer) {
     return <ApiPlayerProfile playerId={id} />;
   }
   
-  return <DbPlayerProfile id={id || ''} />;
+  return <DbPlayerProfile id={id} />;
 };
 
 export default PlayerProfile;
