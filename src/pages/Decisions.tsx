@@ -135,7 +135,7 @@ const DecisionCard = ({
               </div>
               <div className="bg-background/50 rounded-lg px-3 py-1.5">
                 <span className="text-xs text-muted-foreground block">Confidence</span>
-                <span className="font-semibold text-sm">{result.confidence.toFixed(0)}%</span>
+                <span className="font-semibold text-sm">{result.confidence}</span>
               </div>
             </div>
           </div>
@@ -248,7 +248,7 @@ const Decisions = () => {
         propLine,
         overOdds,
         underOdds,
-        oddsFormat: leg.details.oddsFormat,
+        oddsFormat: leg.details.oddsFormat as 'american' | 'decimal' | 'multiplier',
         last10Stats,
       });
 
