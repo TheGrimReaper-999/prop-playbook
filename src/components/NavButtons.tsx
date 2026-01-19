@@ -28,8 +28,8 @@ const NavButtons = ({ showSearch = true }: NavButtonsProps) => {
 
   return (
     <>
-      {/* Fixed buttons container - top left */}
-      <div className="fixed top-4 left-4 z-50 flex gap-2">
+      {/* Fixed buttons container - top right */}
+      <div className="fixed top-4 right-4 z-50 flex gap-2">
         {showSearch && (
           <Button
             onClick={() => setIsSearchOpen(true)}

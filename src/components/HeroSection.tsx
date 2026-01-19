@@ -19,7 +19,7 @@ const HeroSection = () => {
   };
 
   return (
-    <section className="relative min-h-screen flex flex-col items-center justify-center px-6 overflow-hidden">
+    <section className="relative flex flex-col items-center justify-start pt-24 px-6 pb-8 overflow-hidden">
       {/* Background gradient overlay */}
       <div 
         className="absolute inset-0 z-0"
@@ -52,9 +52,6 @@ const HeroSection = () => {
         {/* Today's Fixtures */}
         <TodayFixtures />
       </div>
-      
-      {/* Bottom fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-background to-transparent z-10" />
     </section>
   );
 };

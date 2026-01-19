@@ -1,10 +1,9 @@
 import HeroSection from '@/components/HeroSection';
-import NavButtons from '@/components/NavButtons';
 import BetSlipOverlay from '@/components/BetSlipOverlay';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { Button } from '@/components/ui/button';
-import { LogIn, User } from 'lucide-react';
+import { LogIn, User, Layers } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 
 const Index = () => {
@@ -15,7 +14,7 @@ const Index = () => {
   const displayName = profile?.display_name || user?.email?.split('@')[0] || 'User';
 
   return (
-    <main className="min-h-screen bg-background pb-32">
+    <main className="min-h-screen bg-background pb-40">
       {/* Auth buttons in top right */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
         {!loading && (
@@ -38,8 +37,20 @@ const Index = () => {
         )}
       </div>
       
-      {/* Nav buttons - search and parlays (left side) */}
-      <NavButtons showSearch={false} />
+      {/* Nav buttons - search and parlays (left side on home page to not conflict with auth buttons) */}
+      <div className="fixed top-4 left-4 z-50 flex gap-2">
+        {!loading && user && (
+          <Button
+            onClick={() => navigate('/parlays')}
+            variant="outline"
+            className="gap-2 shadow-lg bg-background/80 backdrop-blur-sm"
+            size="lg"
+          >
+            <Layers className="w-5 h-5" />
+            Parlays
+          </Button>
+        )}
+      </div>
       
       {/* BetSlip floating button and overlay */}
       <BetSlipOverlay />
