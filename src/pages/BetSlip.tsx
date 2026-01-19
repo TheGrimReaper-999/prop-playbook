@@ -217,8 +217,8 @@ const BetSlip = () => {
     try {
       // Fetch stats for all legs
       toast({
-        title: "Loading player stats",
-        description: "Fetching last 10 games for each player...",
+        title: "Loading verified stats",
+        description: `Syncing last 10 games for ${legs.length} player${legs.length !== 1 ? 's' : ''}...`,
       });
       
       const statsMap = await fetchStatsForLegs(legs);
@@ -237,17 +237,30 @@ const BetSlip = () => {
       setLegStats(legStatsMap);
       
       const successCount = Array.from(statsMap.values()).filter(s => s.games.length > 0).length;
+      const failedPlayers = legs
+        .filter(leg => {
+          const stats = statsMap.get(leg.legId);
+          return !stats || stats.games.length === 0;
+        })
+        .map(leg => leg.player.name);
       
       if (successCount === 0) {
         toast({
-          title: "Could not fetch stats",
-          description: "Using placeholder data for analysis. Results may not be accurate.",
+          title: "No verified stats available",
+          description: "Could not fetch any player stats. Please try again later.",
           variant: "destructive",
         });
+        // Don't navigate - stay on page so user can retry
+        return;
       } else if (successCount < legs.length) {
         toast({
           title: "Partial stats loaded",
-          description: `Loaded stats for ${successCount} of ${legs.length} players.`,
+          description: `Loaded verified stats for ${successCount} of ${legs.length} players. Missing: ${failedPlayers.slice(0, 3).join(', ')}${failedPlayers.length > 3 ? '...' : ''}`,
+        });
+      } else {
+        toast({
+          title: "Stats loaded",
+          description: `Verified game data for all ${successCount} players.`,
         });
       }
       
@@ -256,10 +269,10 @@ const BetSlip = () => {
       console.error('Error fetching stats:', error);
       toast({
         title: "Error loading stats",
-        description: "Could not fetch player stats. Using placeholder data.",
+        description: "Could not fetch player stats. Please try again.",
         variant: "destructive",
       });
-      navigate('/decisions');
+      // Don't navigate on error
     } finally {
       setIsLoadingStats(false);
     }

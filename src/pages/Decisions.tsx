@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt, Check, Layers, ChevronDown, ChevronUp, BarChart3, Loader2 } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt, Check, Layers, ChevronDown, ChevronUp, BarChart3, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useBetSlip, BetSlipLeg, ParlayLeg, LegStats } from '@/contexts/BetSlipContext';
 import { evaluateProp, BetDecisionResult } from '@/lib/betting-utils';
 import { toast } from '@/hooks/use-toast';
-import { getStatValuesForType } from '@/hooks/usePlayerStats';
+import { getStatValuesForType, fetchStatsForLegs } from '@/hooks/usePlayerStats';
 import StatsChart from '@/components/StatsChart';
 
 const STAT_TYPE_LABELS: Record<string, string> = {
@@ -81,6 +81,7 @@ const DecisionCard = ({
   const statLabel = STAT_TYPE_LABELS[leg.details.statType] || leg.details.statType || 'Not Set';
   const mainLine = leg.details.mainLine || '-';
   const hasStats = stats && stats.games.length > 0;
+  const hasNoData = !stats || stats.games.length === 0;
 
   return (
     <Card className={`${getDecisionBgColor(result.decision, isSelected)} transition-all`}>
@@ -96,6 +97,7 @@ const DecisionCard = ({
               onCheckedChange={() => onToggleSelect(leg.legId)}
               onClick={(e) => e.stopPropagation()}
               className="h-5 w-5"
+              disabled={hasNoData}
             />
           </div>
 
@@ -117,6 +119,12 @@ const DecisionCard = ({
               {hasStats && (
                 <span className="text-xs bg-green-500/20 text-green-500 px-2 py-0.5 rounded-full">
                   {stats.games.length} games
+                </span>
+              )}
+              {hasNoData && (
+                <span className="text-xs bg-yellow-500/20 text-yellow-500 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  No data
                 </span>
               )}
             </div>
@@ -226,9 +234,67 @@ const DecisionCard = ({
 
 const Decisions = () => {
   const navigate = useNavigate();
-  const { legs, legStats, saveParlay } = useBetSlip();
+  const { legs, legStats, setLegStats, saveParlay } = useBetSlip();
   const [selectedLegs, setSelectedLegs] = useState<Set<string>>(new Set());
   const [expandedLegs, setExpandedLegs] = useState<Set<string>>(new Set());
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [statsLoadAttempted, setStatsLoadAttempted] = useState(false);
+
+  // Check if we need to load stats (self-sufficient behavior)
+  const missingStats = useMemo(() => {
+    return legs.filter(leg => {
+      const stats = legStats.get(leg.legId);
+      return !stats || stats.games.length === 0;
+    });
+  }, [legs, legStats]);
+
+  // Auto-fetch stats if missing when page loads
+  useEffect(() => {
+    if (legs.length === 0 || statsLoadAttempted) return;
+    
+    if (missingStats.length > 0) {
+      const loadStats = async () => {
+        setIsLoadingStats(true);
+        setStatsLoadAttempted(true);
+        
+        try {
+          console.log(`[Decisions] Loading stats for ${legs.length} legs...`);
+          const statsMap = await fetchStatsForLegs(legs);
+          
+          // Merge with existing stats
+          const mergedStats = new Map(legStats);
+          statsMap.forEach((value, key) => {
+            mergedStats.set(key, value);
+          });
+          
+          setLegStats(mergedStats);
+          
+          const successCount = Array.from(statsMap.values()).filter(s => s.games.length > 0).length;
+          console.log(`[Decisions] Loaded stats: ${successCount}/${legs.length} players have data`);
+          
+          if (successCount < legs.length) {
+            toast({
+              title: "Partial stats loaded",
+              description: `Loaded verified stats for ${successCount} of ${legs.length} players.`,
+            });
+          }
+        } catch (error) {
+          console.error('[Decisions] Error loading stats:', error);
+          toast({
+            title: "Error loading stats",
+            description: "Some player stats could not be loaded.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsLoadingStats(false);
+        }
+      };
+      
+      loadStats();
+    } else {
+      setStatsLoadAttempted(true);
+    }
+  }, [legs, legStats, missingStats, statsLoadAttempted, setLegStats]);
 
   const decisions = useMemo(() => {
     return legs.map((leg) => {
@@ -260,10 +326,15 @@ const Decisions = () => {
     const takeOver = decisions.filter((d) => d.result.decision === 'TAKE OVER').length;
     const takeUnder = decisions.filter((d) => d.result.decision === 'TAKE UNDER').length;
     const noBet = decisions.filter((d) => d.result.decision === 'NO BET').length;
-    return { takeOver, takeUnder, noBet };
+    const withData = decisions.filter((d) => d.stats && d.stats.games.length > 0).length;
+    return { takeOver, takeUnder, noBet, withData };
   }, [decisions]);
 
   const toggleSelectLeg = (legId: string) => {
+    // Only allow selection if leg has stats
+    const stats = legStats.get(legId);
+    if (!stats || stats.games.length === 0) return;
+    
     setSelectedLegs((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(legId)) {
@@ -288,8 +359,11 @@ const Decisions = () => {
   };
 
   const selectAll = () => {
-    const allIds = new Set(legs.map((leg) => leg.legId));
-    setSelectedLegs(allIds);
+    // Only select legs with verified stats
+    const validIds = decisions
+      .filter((d) => d.stats && d.stats.games.length > 0)
+      .map((d) => d.leg.legId);
+    setSelectedLegs(new Set(validIds));
   };
 
   const deselectAll = () => {
@@ -297,13 +371,14 @@ const Decisions = () => {
   };
 
   const selectRecommended = () => {
+    // Only select recommended legs that have verified stats
     const recommended = decisions
-      .filter((d) => d.result.decision !== 'NO BET')
+      .filter((d) => d.result.decision !== 'NO BET' && d.stats && d.stats.games.length > 0)
       .map((d) => d.leg.legId);
     setSelectedLegs(new Set(recommended));
   };
 
-const [showNamingDialog, setShowNamingDialog] = useState(false);
+  const [showNamingDialog, setShowNamingDialog] = useState(false);
   const [parlayName, setParlayName] = useState('');
   const [pendingParlayLegs, setPendingParlayLegs] = useState<ParlayLeg[]>([]);
 
@@ -368,6 +443,40 @@ const [showNamingDialog, setShowNamingDialog] = useState(false);
     }
   };
 
+  // Show loading state if we're fetching stats
+  if (isLoadingStats) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="bg-gradient-to-b from-primary/20 to-background p-6">
+          <div className="max-w-4xl mx-auto">
+            <Button
+              variant="ghost"
+              onClick={() => navigate('/betslip')}
+              className="mb-6 hover:bg-primary/10"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to BetSlip
+            </Button>
+          </div>
+        </div>
+        
+        <div className="max-w-4xl mx-auto p-6">
+          <Card className="bg-card/50 border-border/50">
+            <CardContent className="p-12 text-center">
+              <div className="w-20 h-20 rounded-full bg-primary/20 mx-auto mb-4 flex items-center justify-center">
+                <Loader2 className="w-10 h-10 text-primary animate-spin" />
+              </div>
+              <h2 className="text-xl font-semibold mb-2">Loading Verified Stats</h2>
+              <p className="text-muted-foreground">
+                Fetching real game data for {legs.length} player{legs.length !== 1 ? 's' : ''}...
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-background">
       {/* Header */}
@@ -390,6 +499,11 @@ const [showNamingDialog, setShowNamingDialog] = useState(false);
               <h1 className="text-4xl font-black tracking-tight">Decisions</h1>
               <p className="text-muted-foreground">
                 {legs.length} leg{legs.length !== 1 ? 's' : ''} analyzed
+                {summary.withData < legs.length && (
+                  <span className="ml-2 text-yellow-500">
+                    • {summary.withData} with verified data
+                  </span>
+                )}
                 {selectedLegs.size > 0 && (
                   <span className="ml-2 text-primary font-medium">
                     • {selectedLegs.size} selected
@@ -476,24 +590,24 @@ const [showNamingDialog, setShowNamingDialog] = useState(false);
             {/* Action Buttons */}
             <Card className="bg-primary/10 border-primary/30">
               <CardContent className="p-6">
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Layers className="w-6 h-6 text-primary" />
+                    <div>
+                      <p className="font-semibold">
+                        {selectedLegs.size} leg{selectedLegs.size !== 1 ? 's' : ''} selected
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Ready to save as parlay
+                      </p>
+                    </div>
+                  </div>
                   <Button 
-                    variant="outline" 
-                    size="lg" 
-                    className="flex-1"
-                    onClick={() => navigate('/betslip')}
-                  >
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to BetSlip
-                  </Button>
-                  <Button 
-                    size="lg" 
-                    className="flex-1"
                     onClick={handleAddToParlay}
                     disabled={selectedLegs.size === 0}
+                    className="w-full sm:w-auto"
                   >
-                    <Layers className="w-4 h-4 mr-2" />
-                    Add to Parlay ({selectedLegs.size})
+                    Save to Parlays
                   </Button>
                 </div>
               </CardContent>
@@ -502,23 +616,30 @@ const [showNamingDialog, setShowNamingDialog] = useState(false);
         )}
       </div>
 
-      {/* Parlay Naming Dialog */}
+      {/* Naming Dialog */}
       <Dialog open={showNamingDialog} onOpenChange={setShowNamingDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Name Your Parlay</DialogTitle>
           </DialogHeader>
-          <div className="py-4">
-            <Input
-              placeholder="Enter parlay name..."
-              value={parlayName}
-              onChange={(e) => setParlayName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleConfirmSaveParlay()}
-              autoFocus
-            />
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label htmlFor="parlay-name" className="text-sm font-medium">
+                Parlay Name
+              </label>
+              <Input
+                id="parlay-name"
+                value={parlayName}
+                onChange={(e) => setParlayName(e.target.value)}
+                placeholder="Enter a name for your parlay"
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {pendingParlayLegs.length} leg{pendingParlayLegs.length !== 1 ? 's' : ''} will be saved
+            </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNamingDialog(false)} disabled={isSaving}>
+            <Button variant="outline" onClick={() => setShowNamingDialog(false)}>
               Cancel
             </Button>
             <Button onClick={handleConfirmSaveParlay} disabled={isSaving}>

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { usePlayerInfo, usePlayerGameLog, usePlayerSplits, GameLogEntry, PlayerStats } from '@/hooks/useNbaApi';
+import { usePlayerDbStats } from '@/hooks/usePlayerDbStats';
 import NavButtons from '@/components/NavButtons';
 import BetSlipOverlay from '@/components/BetSlipOverlay';
 import Footer from '@/components/Footer';
@@ -174,9 +175,10 @@ const PlayerHeader = ({
 interface SeasonStatsProps {
   stats: PlayerStats | null;
   isLoading: boolean;
+  isFromDb?: boolean;
 }
 
-const SeasonStats = ({ stats, isLoading }: SeasonStatsProps) => {
+const SeasonStats = ({ stats, isLoading, isFromDb }: SeasonStatsProps) => {
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -209,15 +211,22 @@ const SeasonStats = ({ stats, isLoading }: SeasonStatsProps) => {
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-      {statItems.map((stat) => (
-        <Card key={stat.label} className="bg-card/50 border-border/50">
-          <CardContent className="p-4 text-center">
-            <p className="text-3xl font-bold text-primary">{stat.value || '0'}</p>
-            <p className="text-sm text-muted-foreground">{stat.label}</p>
-          </CardContent>
-        </Card>
-      ))}
+    <div className="space-y-2 mb-8">
+      {isFromDb && (
+        <p className="text-xs text-muted-foreground">
+          * Based on last 10 games
+        </p>
+      )}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {statItems.map((stat) => (
+          <Card key={stat.label} className="bg-card/50 border-border/50">
+            <CardContent className="p-4 text-center">
+              <p className="text-3xl font-bold text-primary">{stat.value || '0'}</p>
+              <p className="text-sm text-muted-foreground">{stat.label}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 };
@@ -225,25 +234,20 @@ const SeasonStats = ({ stats, isLoading }: SeasonStatsProps) => {
 interface RecentGamesProps {
   games: GameLogEntry[];
   isLoading: boolean;
+  lastUpdated?: string;
 }
 
 // Helper to normalize matchup display to "vs OPP" format
 const formatMatchup = (game: GameLogEntry): string => {
-  // Extract opponent abbreviation - matchup might be "vs LAL", "@ BOS", etc.
-  // We want to normalize to always show "vs OPP"
   const matchup = game.matchup || '';
-  
-  // Try to extract the opponent abbreviation from the matchup string
   const abbrevMatch = matchup.match(/(?:vs|@)\s*(\w+)/i);
   if (abbrevMatch && abbrevMatch[1]) {
     return `vs ${abbrevMatch[1].toUpperCase()}`;
   }
-  
-  // Fallback: just show "vs" with whatever we have
   return matchup.replace(/^[@]\s*/i, 'vs ');
 };
 
-const RecentGames = ({ games, isLoading }: RecentGamesProps) => {
+const RecentGames = ({ games, isLoading, lastUpdated }: RecentGamesProps) => {
   const navigate = useNavigate();
 
   const handleGameClick = (gameId: string) => {
@@ -268,7 +272,7 @@ const RecentGames = ({ games, isLoading }: RecentGamesProps) => {
     return (
       <Card className="bg-card/50 border-border/50">
         <CardContent className="p-6 text-center text-muted-foreground">
-          No recent games available.
+          No recent games available. Try refreshing the data.
         </CardContent>
       </Card>
     );
@@ -277,6 +281,13 @@ const RecentGames = ({ games, isLoading }: RecentGamesProps) => {
   return (
     <Card className="bg-card/50 border-border/50">
       <CardContent className="p-0">
+        {lastUpdated && (
+          <div className="px-4 pt-3 pb-1">
+            <p className="text-xs text-muted-foreground">
+              Last game: {new Date(lastUpdated).toLocaleDateString()}
+            </p>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -315,7 +326,7 @@ const RecentGames = ({ games, isLoading }: RecentGamesProps) => {
                     <span className={`px-2 py-1 rounded text-xs font-bold ${
                       game.wl === 'W' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
                     }`}>
-                      {game.wl}
+                      {game.wl || '-'}
                     </span>
                   </td>
                   <td className="p-2">
@@ -351,7 +362,6 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
     },
     onSuccess: () => {
       toast.success('Player data refreshed!');
-      // Invalidate queries to refetch fresh data
       queryClient.invalidateQueries({ queryKey: ['player-gamelog', playerId] });
       queryClient.invalidateQueries({ queryKey: ['player-splits', playerId] });
     },
@@ -443,12 +453,12 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
   );
 };
 
-// Database Player Profile (from search)
-// If player has api_player_id, fetch real API data
+// Database Player Profile (from search) - ALWAYS shows DB-backed stats
 const DbPlayerProfile = ({ id }: { id: string }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  // Fetch player info
   const { data: player, isLoading } = useQuery({
     queryKey: ['player', id],
     queryFn: async () => {
@@ -464,6 +474,7 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
     enabled: !!id,
   });
 
+  // Fetch team for navigation
   const { data: team } = useQuery({
     queryKey: ['team-by-name', player?.team_name],
     queryFn: async () => {
@@ -479,10 +490,20 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
     enabled: !!player?.team_name,
   });
 
-  // If player has an api_player_id, fetch real stats from API
+  // Use the new DB stats hook - this will sync if needed
+  const { 
+    data: dbStats, 
+    isLoading: dbStatsLoading,
+    refetch: refetchDbStats
+  } = usePlayerDbStats(
+    player?.id || null,
+    player?.full_name || '',
+    player?.team_name
+  );
+
+  // Also fetch API stats if player has api_player_id (for season averages)
   const apiPlayerId = player?.api_player_id;
-  const { data: playerStats, isLoading: statsLoading } = usePlayerSplits(apiPlayerId || null);
-  const { data: gamelog, isLoading: gamelogLoading } = usePlayerGameLog(apiPlayerId || null);
+  const { data: apiStats, isLoading: apiStatsLoading } = usePlayerSplits(apiPlayerId || null);
 
   // Mutation to sync player data
   const syncMutation = useMutation({
@@ -501,10 +522,14 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
     },
     onSuccess: () => {
       toast.success('Player data refreshed!');
-      // Invalidate queries to refetch fresh data
+      // Invalidate all relevant queries
       queryClient.invalidateQueries({ queryKey: ['player', id] });
-      queryClient.invalidateQueries({ queryKey: ['player-gamelog'] });
-      queryClient.invalidateQueries({ queryKey: ['player-splits'] });
+      queryClient.invalidateQueries({ queryKey: ['player-db-stats', id] });
+      if (apiPlayerId) {
+        queryClient.invalidateQueries({ queryKey: ['player-splits', apiPlayerId] });
+      }
+      // Refetch DB stats
+      refetchDbStats();
     },
     onError: (error) => {
       toast.error('Failed to refresh data: ' + (error as Error).message);
@@ -539,6 +564,15 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
     );
   }
 
+  // Use API stats if available, otherwise use derived averages from DB games
+  const displayStats = apiStats || dbStats?.derivedAverages || null;
+  const isStatsFromDb = !apiStats && !!dbStats?.derivedAverages;
+  const statsLoading = apiPlayerId ? apiStatsLoading : dbStatsLoading;
+
+  // Always use DB games for recent games (our source of truth)
+  const recentGames = dbStats?.games || [];
+  const lastUpdated = recentGames.length > 0 ? recentGames[0].gameDate : undefined;
+
   return (
     <main className="min-h-screen bg-background">
       <NavButtons />
@@ -557,15 +591,18 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
 
       <div className="max-w-6xl mx-auto p-6">
         <h2 className="text-2xl font-bold mb-4">Season Averages</h2>
-        <SeasonStats stats={playerStats} isLoading={statsLoading && !!apiPlayerId} />
-        {!apiPlayerId && !statsLoading && (
-          <p className="text-sm text-muted-foreground mb-4">
-            Stats not available - player not linked to API data.
-          </p>
-        )}
+        <SeasonStats 
+          stats={displayStats} 
+          isLoading={statsLoading} 
+          isFromDb={isStatsFromDb}
+        />
 
         <h2 className="text-2xl font-bold mb-4">Recent Games</h2>
-        <RecentGames games={gamelog || []} isLoading={gamelogLoading && !!apiPlayerId} />
+        <RecentGames 
+          games={recentGames} 
+          isLoading={dbStatsLoading} 
+          lastUpdated={lastUpdated}
+        />
       </div>
       
       <Footer />
