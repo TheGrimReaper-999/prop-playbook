@@ -11,6 +11,7 @@ import BetSlip from "./pages/BetSlip";
 import Decisions from "./pages/Decisions";
 import Parlays from "./pages/Parlays";
 import Auth from "./pages/Auth";
+import Profile from "./pages/Profile";
 import ImportData from "./pages/ImportData";
 import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/profile" element={<Profile />} />
             <Route path="/player/:id" element={<PlayerProfile />} />
             <Route path="/player/api/:id" element={<PlayerProfile />} />
             <Route path="/team/:id" element={<TeamProfile />} />
