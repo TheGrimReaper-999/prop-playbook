@@ -251,23 +251,59 @@ export const syncAndFetchPlayerStats = async (
   return fetchPlayerStatsFromDb(dbPlayerId, team);
 };
 
-// Get player stats - first try DB, then sync if empty
-export const getPlayerStats = async (
+// Check if stats need syncing (incomplete or stale)
+const STALE_THRESHOLD_HOURS = 36;
+const MIN_GAMES_THRESHOLD = 5;
+
+export const shouldSyncPlayerStats = (games: GameLogEntry[]): boolean => {
+  // Need sync if no games or very few games
+  if (games.length < MIN_GAMES_THRESHOLD) {
+    return true;
+  }
+  
+  // Check if most recent game is stale
+  if (games.length > 0) {
+    const mostRecentDate = new Date(games[0].gameDate);
+    const now = new Date();
+    const hoursSinceLastGame = (now.getTime() - mostRecentDate.getTime()) / (1000 * 60 * 60);
+    
+    // If most recent game is more than threshold hours old, might need sync
+    // But only during active season (rough check: October-June)
+    const month = now.getMonth();
+    const isSeasonActive = month >= 9 || month <= 5; // Oct-June
+    
+    if (isSeasonActive && hoursSinceLastGame > STALE_THRESHOLD_HOURS) {
+      return true;
+    }
+  }
+  
+  return false;
+};
+
+// Ensure player stats exist - main entry point for getting verified stats
+export const ensurePlayerStats = async (
   dbPlayerId: string,
   playerName: string,
   teamName?: string
 ): Promise<GameLogEntry[]> => {
-  // Try fetching from database first
-  let stats = await fetchPlayerStatsFromDb(dbPlayerId, teamName);
+  console.log(`[ensurePlayerStats] Fetching stats for ${playerName}...`);
   
-  if (stats.length === 0) {
-    // No stats in DB, need to sync via smart-sync
-    console.log(`No stats in DB for ${playerName}, syncing...`);
+  // First try to fetch from database
+  let stats = await fetchPlayerStatsFromDb(dbPlayerId, teamName);
+  console.log(`[ensurePlayerStats] Found ${stats.length} games in DB for ${playerName}`);
+  
+  // Check if we need to sync
+  if (shouldSyncPlayerStats(stats)) {
+    console.log(`[ensurePlayerStats] Stats incomplete/stale for ${playerName}, syncing...`);
     stats = await syncAndFetchPlayerStats(dbPlayerId, playerName, teamName);
+    console.log(`[ensurePlayerStats] After sync: ${stats.length} games for ${playerName}`);
   }
-
+  
   return stats;
 };
+
+// Legacy alias for backward compatibility
+export const getPlayerStats = ensurePlayerStats;
 
 // Fetch player game log by API player ID (fallback to API)
 export const fetchPlayerGameLog = async (
@@ -411,28 +447,48 @@ export interface LegStats {
   error?: string;
 }
 
+// Process legs with concurrency control
+const processBatch = async <T, R>(
+  items: T[],
+  processor: (item: T) => Promise<R>,
+  concurrency: number = 3
+): Promise<PromiseSettledResult<R>[]> => {
+  const results: PromiseSettledResult<R>[] = [];
+  
+  for (let i = 0; i < items.length; i += concurrency) {
+    const batch = items.slice(i, i + concurrency);
+    const batchResults = await Promise.allSettled(batch.map(processor));
+    results.push(...batchResults);
+  }
+  
+  return results;
+};
+
 export const fetchStatsForLegs = async (
   legs: { legId: string; player: { id: string; name: string; team?: string } }[]
 ): Promise<Map<string, LegStats>> => {
   const statsMap = new Map<string, LegStats>();
 
-  // Process legs in parallel
-  const results = await Promise.allSettled(
-    legs.map(async (leg) => {
+  console.log(`[fetchStatsForLegs] Fetching stats for ${legs.length} legs...`);
+
+  // Process legs with concurrency control (3 at a time)
+  const results = await processBatch(
+    legs,
+    async (leg) => {
       try {
-        // Use smart-sync for reliable data fetching with team info
-        const games = await getPlayerStats(leg.player.id, leg.player.name, leg.player.team);
+        // Use ensurePlayerStats for reliable data fetching
+        const games = await ensurePlayerStats(leg.player.id, leg.player.name, leg.player.team);
         const statValues = extractStatValues(games);
 
         return {
           legId: leg.legId,
           playerId: leg.player.id,
-          apiPlayerId: null, // We don't need this anymore
+          apiPlayerId: null,
           games,
           statValues,
         };
       } catch (err) {
-        console.error(`Error fetching stats for ${leg.player.name}:`, err);
+        console.error(`[fetchStatsForLegs] Error for ${leg.player.name}:`, err);
         return {
           legId: leg.legId,
           playerId: leg.player.id,
@@ -442,14 +498,19 @@ export const fetchStatsForLegs = async (
           error: err instanceof Error ? err.message : 'Unknown error',
         };
       }
-    })
+    },
+    3 // Concurrency limit
   );
 
+  let successCount = 0;
   results.forEach((result) => {
     if (result.status === 'fulfilled') {
       statsMap.set(result.value.legId, result.value);
+      if (result.value.games.length > 0) successCount++;
     }
   });
+
+  console.log(`[fetchStatsForLegs] Completed: ${successCount}/${legs.length} players have stats`);
 
   return statsMap;
 };
