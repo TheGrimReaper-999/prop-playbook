@@ -408,18 +408,21 @@ serve(async (req) => {
             const players = team.players || [];
             for (const player of players) {
               if (player.stats && player.stats.length > 0) {
-                // Look up player_id from nba_players table
+                // Look up player_id and name from nba_players table by api_player_id
                 const { data: playerData } = await supabase
                   .from('nba_players')
-                  .select('id')
-                  .eq('api_player_id', player.id)
+                  .select('id, full_name')
+                  .eq('api_player_id', String(player.id))
                   .maybeSingle();
+
+                // Use DB name if available, then API name, never "Unknown"
+                const playerName = playerData?.full_name || player.displayName || player.fullName || player.shortName || `Player #${player.id}`;
 
                 const stats = parseGameStats(
                   eventId,
                   gameDate,
                   player.stats,
-                  player.displayName || player.fullName || 'Unknown',
+                  playerName,
                   playerData?.id || null
                 );
                 playerStats.push(stats);
@@ -467,12 +470,18 @@ serve(async (req) => {
             const awayTeam = gameEvent.competitors?.find((c: any) => !c.isHome);
 
             if (homeTeam && awayTeam) {
-              // Update fixture with latest scores and status
+              // Update fixture with latest scores, status, AND team names (fix missing names)
               await supabase
                 .from('nba_fixtures')
                 .update({
-                  home_team_score: homeTeam.score ?? null,
-                  away_team_score: awayTeam.score ?? null,
+                  home_team_name: homeTeam.displayName || fixtureData.home_team_name,
+                  home_team_abbrev: homeTeam.abbrev || fixtureData.home_team_abbrev,
+                  home_team_logo: homeTeam.logo || fixtureData.home_team_logo,
+                  home_team_score: homeTeam.score ?? fixtureData.home_team_score,
+                  away_team_name: awayTeam.displayName || fixtureData.away_team_name,
+                  away_team_abbrev: awayTeam.abbrev || fixtureData.away_team_abbrev,
+                  away_team_logo: awayTeam.logo || fixtureData.away_team_logo,
+                  away_team_score: awayTeam.score ?? fixtureData.away_team_score,
                   status: gameEvent.status?.state || 'scheduled',
                   status_detail: gameEvent.status?.detail || null,
                 })
