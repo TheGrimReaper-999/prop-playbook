@@ -6,9 +6,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { format, addDays, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 // Get today's date string using local system date
 // Returns YYYYMMDD format
@@ -56,8 +58,9 @@ const TodayFixtures = () => {
   const todayString = getTodayString();
   const [selectedDateStr, setSelectedDateStr] = useState<string>(todayString);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   
-  const { data: games, isLoading, error } = useSchedule(selectedDateStr);
+  const { data: games, isLoading, error, refetch } = useSchedule(selectedDateStr);
 
   const isToday = selectedDateStr === todayString;
   
@@ -84,6 +87,28 @@ const TodayFixtures = () => {
   const getDateLabel = () => {
     if (isToday) return "Today's Games";
     return format(selectedDate, 'EEEE, MMM d');
+  };
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-completed-games', {
+        body: { days: 3 },
+      });
+
+      if (error) {
+        toast.error('Sync failed', { description: error.message });
+      } else {
+        toast.success('Database synced', {
+          description: `Updated ${data?.gamesUpdated || 0} games with ${data?.playerStatsAdded || 0} player stats`,
+        });
+        refetch();
+      }
+    } catch (err) {
+      toast.error('Sync failed', { description: 'Could not reach sync service' });
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   if (isLoading) {
@@ -177,6 +202,18 @@ const TodayFixtures = () => {
           className="hover:bg-muted"
         >
           <ChevronRight className="w-4 h-4" />
+        </Button>
+
+        {/* Sync Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleManualSync}
+          disabled={isSyncing}
+          className="hover:bg-muted ml-2"
+          title="Sync database with latest game data"
+        >
+          <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
         </Button>
       </div>
 
