@@ -9,6 +9,7 @@ import { usePlayerList, useTeamInfoByName, RapidApiPlayer } from '@/hooks/useNba
 import { useBetSlip } from '@/contexts/BetSlipContext';
 import NavButtons from '@/components/NavButtons';
 import BetSlipOverlay from '@/components/BetSlipOverlay';
+import Footer from '@/components/Footer';
 
 const TeamProfile = () => {
   const { id } = useParams<{ id: string }>();
@@ -231,6 +232,8 @@ const TeamProfile = () => {
           </Card>
         )}
       </div>
+      
+      <Footer />
     </main>
   );
 };

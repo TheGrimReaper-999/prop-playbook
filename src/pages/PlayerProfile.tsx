@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { usePlayerInfo, usePlayerGameLog, usePlayerSplits, GameLogEntry, PlayerStats } from '@/hooks/useNbaApi';
 import NavButtons from '@/components/NavButtons';
 import BetSlipOverlay from '@/components/BetSlipOverlay';
+import Footer from '@/components/Footer';
 import { useBetSlip } from '@/contexts/BetSlipContext';
 
 interface PlayerHeaderProps {
@@ -494,6 +495,8 @@ const DbPlayerProfile = ({ id }: { id: string }) => {
         <h2 className="text-2xl font-bold mb-4">Recent Games</h2>
         <RecentGames games={gamelog || []} isLoading={gamelogLoading && !!apiPlayerId} />
       </div>
+      
+      <Footer />
     </main>
   );
 };

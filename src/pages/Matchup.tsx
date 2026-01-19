@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowLeft, TrendingUp, Users, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import Footer from '@/components/Footer';
 
 interface PlayerStat {
   player_name: string;
@@ -193,8 +194,8 @@ const Matchup = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-background flex flex-col">
+      <div className="max-w-4xl mx-auto p-4 flex-1">
         {/* Back Button */}
         <Button 
           variant="ghost" 
@@ -315,6 +316,8 @@ const Matchup = () => {
           </Card>
         )}
       </div>
+      
+      <Footer />
     </div>
   );
 };
