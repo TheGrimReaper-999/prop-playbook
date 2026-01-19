@@ -16,6 +16,18 @@ const TeamProfile = () => {
   const navigate = useNavigate();
   const { addPlayer, removePlayer, isPlayerInSlip } = useBetSlip();
 
+  // Guard against missing id
+  if (!id) {
+    return (
+      <main className="min-h-screen bg-background p-6 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4">Invalid Team ID</h1>
+          <Button onClick={() => navigate('/')}>Go Home</Button>
+        </div>
+      </main>
+    );
+  }
+
   // Fetch team from database
   const { data: team, isLoading: teamLoading } = useQuery({
     queryKey: ['team', id],
