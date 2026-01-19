@@ -23,6 +23,8 @@ const getStatValue = (stats: any, statType: string): number => {
   const reb = stats.rebounds || 0;
   const ast = stats.assists || 0;
   const fg3m = stats.three_pt_made || 0;
+  const stl = stats.steals || 0;
+  const blk = stats.blocks || 0;
 
   switch (statType) {
     case 'pts':
@@ -33,6 +35,10 @@ const getStatValue = (stats: any, statType: string): number => {
       return ast;
     case '3pm':
       return fg3m;
+    case 'stl':
+      return stl;
+    case 'blk':
+      return blk;
     case 'pra':
       return pts + reb + ast;
     case 'pr':
@@ -41,6 +47,8 @@ const getStatValue = (stats: any, statType: string): number => {
       return pts + ast;
     case 'ra':
       return reb + ast;
+    case 'stl+blk':
+      return stl + blk;
     default:
       return 0;
   }
