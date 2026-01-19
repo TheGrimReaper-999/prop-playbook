@@ -11,8 +11,6 @@ const Index = () => {
   const { profile } = useProfile();
   const navigate = useNavigate();
 
-  const displayName = profile?.display_name || user?.email?.split('@')[0] || 'User';
-
   return (
     <main className="min-h-screen bg-background pb-40">
       {/* Auth buttons in top right */}
@@ -23,10 +21,18 @@ const Index = () => {
               variant="outline"
               size="sm"
               onClick={() => navigate('/profile')}
-              className="bg-card/80 backdrop-blur-sm border-border/50"
+              className="bg-card/80 backdrop-blur-sm border-border/50 gap-2"
             >
-              <User className="w-4 h-4 mr-2" />
-              {displayName}
+              {profile?.avatar_url ? (
+                <img 
+                  src={profile.avatar_url} 
+                  alt="Avatar" 
+                  className="w-5 h-5 rounded-full object-cover"
+                />
+              ) : (
+                <User className="w-4 h-4" />
+              )}
+              {profile?.display_name || 'Profile'}
             </Button>
           ) : (
             <Button onClick={() => navigate('/auth')} size="sm" className="shadow-lg">

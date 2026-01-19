@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { ArrowLeft, Mail, Lock, Loader2, LogIn, UserPlus } from 'lucide-react';
+import { ArrowLeft, Mail, Lock, Loader2, LogIn, UserPlus, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
-import { toast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 
 const authSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -24,6 +24,7 @@ const Auth = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [showVerificationMessage, setShowVerificationMessage] = useState(false);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -58,49 +59,30 @@ const Auth = () => {
       if (activeTab === 'login') {
         const { error } = await signIn(email, password);
         if (error) {
-          if (error.message.includes('Invalid login credentials')) {
-            toast({
-              title: 'Login failed',
-              description: 'Invalid email or password. Please try again.',
-              variant: 'destructive',
-            });
+          if (error.message.includes('Email not confirmed')) {
+            toast.error('Please verify your email before signing in. Check your inbox for a confirmation link.');
+          } else if (error.message.includes('Invalid login credentials')) {
+            toast.error('Invalid email or password. Please try again.');
           } else {
-            toast({
-              title: 'Login failed',
-              description: error.message,
-              variant: 'destructive',
-            });
+            toast.error(error.message);
           }
         } else {
-          toast({
-            title: 'Welcome back!',
-            description: 'You have successfully signed in.',
-          });
+          toast.success('Welcome back!');
           navigate('/');
         }
       } else {
         const { error } = await signUp(email, password);
         if (error) {
           if (error.message.includes('already registered')) {
-            toast({
-              title: 'Account exists',
-              description: 'This email is already registered. Please sign in instead.',
-              variant: 'destructive',
-            });
+            toast.error('This email is already registered. Please sign in instead.');
             setActiveTab('login');
           } else {
-            toast({
-              title: 'Sign up failed',
-              description: error.message,
-              variant: 'destructive',
-            });
+            toast.error(error.message);
           }
         } else {
-          toast({
-            title: 'Account created!',
-            description: 'You have successfully signed up.',
-          });
-          navigate('/');
+          // Show verification message
+          setShowVerificationMessage(true);
+          toast.success('Please check your email to verify your account.');
         }
       }
     } finally {
@@ -112,6 +94,68 @@ const Auth = () => {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </main>
+    );
+  }
+
+  // Show verification success message
+  if (showVerificationMessage) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="bg-gradient-to-b from-primary/20 to-background p-6">
+          <div className="max-w-md mx-auto">
+            <Button
+              variant="ghost"
+              onClick={() => navigate('/')}
+              className="mb-6 hover:bg-primary/10"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Home
+            </Button>
+          </div>
+        </div>
+
+        <div className="max-w-md mx-auto p-6">
+          <Card className="bg-card/50 border-border/50">
+            <CardHeader className="text-center">
+              <div className="mx-auto w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mb-4">
+                <CheckCircle className="w-8 h-8 text-green-500" />
+              </div>
+              <CardTitle className="text-2xl font-black">Check Your Email</CardTitle>
+              <CardDescription className="text-base mt-2">
+                We've sent a verification link to:
+              </CardDescription>
+              <p className="font-semibold text-foreground mt-1">{email}</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground text-center">
+                Click the link in the email to verify your account. 
+                Once verified, you can sign in.
+              </p>
+              <div className="space-y-2">
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => {
+                    setShowVerificationMessage(false);
+                    setActiveTab('login');
+                    setPassword('');
+                  }}
+                >
+                  <LogIn className="w-4 h-4 mr-2" />
+                  Go to Sign In
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  className="w-full text-muted-foreground"
+                  onClick={() => setShowVerificationMessage(false)}
+                >
+                  Didn't receive email? Try again
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </main>
     );
   }
@@ -228,7 +272,7 @@ const Auth = () => {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Password must be at least 6 characters
+                    Password must be at least 6 characters. A verification email will be sent.
                   </p>
                 </TabsContent>
 
