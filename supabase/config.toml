@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.sync-completed-games]
 verify_jwt = false
+
+[functions.smart-sync]
+verify_jwt = false
