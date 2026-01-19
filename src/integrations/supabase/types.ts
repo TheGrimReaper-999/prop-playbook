@@ -232,6 +232,7 @@ export type Database = {
           id: string
           legs: Json
           name: string
+          pnl: number | null
           updated_at: string
           user_ip: string
         }
@@ -240,6 +241,7 @@ export type Database = {
           id?: string
           legs?: Json
           name: string
+          pnl?: number | null
           updated_at?: string
           user_ip: string
         }
@@ -248,6 +250,7 @@ export type Database = {
           id?: string
           legs?: Json
           name?: string
+          pnl?: number | null
           updated_at?: string
           user_ip?: string
         }

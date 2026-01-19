@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil, Loader2 } from 'lucide-react';
+import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil, Loader2, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -82,12 +82,16 @@ interface ParlayCardProps {
   parlay: SavedParlay;
   onDelete: (id: string) => void;
   onRename: (id: string) => void;
+  onPnlUpdate: (id: string, pnl: number | null) => void;
   status?: ParlayStatus;
   legStatuses?: Map<string, LegStatus>;
   isDeleting?: boolean;
 }
 
-const ParlayCard = ({ parlay, onDelete, onRename, status = 'pending', legStatuses, isDeleting }: ParlayCardProps) => {
+const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending', legStatuses, isDeleting }: ParlayCardProps) => {
+  const [pnlInput, setPnlInput] = useState<string>(parlay.pnl?.toString() ?? '');
+  const [isUpdatingPnl, setIsUpdatingPnl] = useState(false);
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -97,6 +101,21 @@ const ParlayCard = ({ parlay, onDelete, onRename, status = 'pending', legStatuse
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const handlePnlBlur = async () => {
+    const newPnl = pnlInput.trim() === '' ? null : parseFloat(pnlInput);
+    if (newPnl === parlay.pnl || (pnlInput.trim() === '' && parlay.pnl === null)) return;
+    if (pnlInput.trim() !== '' && isNaN(newPnl!)) {
+      setPnlInput(parlay.pnl?.toString() ?? '');
+      return;
+    }
+    setIsUpdatingPnl(true);
+    try {
+      await onPnlUpdate(parlay.id, newPnl);
+    } finally {
+      setIsUpdatingPnl(false);
+    }
   };
 
   return (
@@ -169,6 +188,36 @@ const ParlayCard = ({ parlay, onDelete, onRename, status = 'pending', legStatuse
             );
           })}
         </div>
+
+        {/* PnL Input */}
+        <div className="mt-4 pt-4 border-t border-border/50 flex items-center gap-3">
+          <DollarSign className="w-5 h-5 text-muted-foreground" />
+          <span className="text-sm font-medium text-muted-foreground">P&L:</span>
+          <div className="relative flex-1 max-w-[150px]">
+            <Input
+              type="text"
+              inputMode="decimal"
+              placeholder="+100 or -50"
+              value={pnlInput}
+              onChange={(e) => setPnlInput(e.target.value)}
+              onBlur={handlePnlBlur}
+              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+              disabled={isUpdatingPnl}
+              className={`h-9 text-sm ${
+                parlay.pnl && parlay.pnl > 0 ? 'text-green-500' : 
+                parlay.pnl && parlay.pnl < 0 ? 'text-red-500' : ''
+              }`}
+            />
+            {isUpdatingPnl && (
+              <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+            )}
+          </div>
+          {parlay.pnl !== null && parlay.pnl !== undefined && (
+            <span className={`text-sm font-semibold ${parlay.pnl > 0 ? 'text-green-500' : parlay.pnl < 0 ? 'text-red-500' : ''}`}>
+              {parlay.pnl > 0 ? '+' : ''}{parlay.pnl.toFixed(2)}
+            </span>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -176,7 +225,7 @@ const ParlayCard = ({ parlay, onDelete, onRename, status = 'pending', legStatuse
 
 const Parlays = () => {
   const navigate = useNavigate();
-  const { parlays, parlaysLoading, deleteParlay, renameParlay, clearParlays } = useBetSlip();
+  const { parlays, parlaysLoading, deleteParlay, renameParlay, updateParlayPnl, clearParlays } = useBetSlip();
   const { data: parlayStatuses } = useParlayStatus(parlays);
   
   const [showRenameDialog, setShowRenameDialog] = useState(false);
@@ -221,6 +270,27 @@ const Parlays = () => {
       setShowRenameDialog(true);
     }
   };
+
+  const handlePnlUpdate = async (parlayId: string, pnl: number | null) => {
+    try {
+      await updateParlayPnl(parlayId, pnl);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update P&L. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Calculate total PnL
+  const totalPnl = useMemo(() => {
+    return parlays.reduce((sum, p) => sum + (p.pnl || 0), 0);
+  }, [parlays]);
+
+  const parlaysWithPnl = useMemo(() => {
+    return parlays.filter(p => p.pnl !== null && p.pnl !== undefined);
+  }, [parlays]);
 
   const handleConfirmRename = async () => {
     if (renamingParlayId && newParlayName.trim()) {
@@ -327,6 +397,7 @@ const Parlays = () => {
                     parlay={parlay} 
                     onDelete={handleDelete}
                     onRename={handleStartRename}
+                    onPnlUpdate={handlePnlUpdate}
                     status={result?.status}
                     legStatuses={legStatusMap}
                     isDeleting={isDeleting === parlay.id}
@@ -334,6 +405,36 @@ const Parlays = () => {
                 );
               })}
             </div>
+
+            {/* PnL Summary */}
+            {parlaysWithPnl.length > 0 && (
+              <Card className={`border-2 ${totalPnl > 0 ? 'border-green-500/50 bg-green-500/10' : totalPnl < 0 ? 'border-red-500/50 bg-red-500/10' : 'border-border/50 bg-card/50'}`}>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        totalPnl > 0 ? 'bg-green-500/20' : totalPnl < 0 ? 'bg-red-500/20' : 'bg-muted'
+                      }`}>
+                        <DollarSign className={`w-6 h-6 ${
+                          totalPnl > 0 ? 'text-green-500' : totalPnl < 0 ? 'text-red-500' : 'text-muted-foreground'
+                        }`} />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-lg">Total P&L</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {parlaysWithPnl.length} of {parlays.length} parlays tracked
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`text-3xl font-black ${
+                      totalPnl > 0 ? 'text-green-500' : totalPnl < 0 ? 'text-red-500' : 'text-foreground'
+                    }`}>
+                      {totalPnl > 0 ? '+' : ''}{totalPnl.toFixed(2)}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Action Button */}
             <Card className="bg-primary/10 border-primary/30">
