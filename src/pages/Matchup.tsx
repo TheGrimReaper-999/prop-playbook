@@ -1,10 +1,12 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, TrendingUp, Users } from 'lucide-react';
+import { ArrowLeft, TrendingUp, Users, RefreshCw } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 interface PlayerStat {
   player_name: string;
@@ -67,6 +69,25 @@ const useGamePlayerStats = (eventId: string) => {
   });
 };
 
+const useSyncGameStats = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (eventId: string) => {
+      const { data, error } = await supabase.functions.invoke('populate-stats', {
+        body: { action: 'sync-game-boxscore', eventId }
+      });
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (_, eventId) => {
+      queryClient.invalidateQueries({ queryKey: ['game-details', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['game-player-stats', eventId] });
+    }
+  });
+};
+
 const PlayerCard = ({ player, rank }: { player: PlayerStat; rank: number }) => {
   const navigate = useNavigate();
   
@@ -113,9 +134,41 @@ const PlayerCard = ({ player, rank }: { player: PlayerStat; rank: number }) => {
 const Matchup = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
+  const [hasSynced, setHasSynced] = useState(false);
   
-  const { data: game, isLoading: gameLoading } = useGameDetails(eventId || '');
-  const { data: playerStats, isLoading: statsLoading } = useGamePlayerStats(eventId || '');
+  const { data: game, isLoading: gameLoading, refetch: refetchGame } = useGameDetails(eventId || '');
+  const { data: playerStats, isLoading: statsLoading, refetch: refetchStats } = useGamePlayerStats(eventId || '');
+  const syncMutation = useSyncGameStats();
+
+  // Auto-sync if game is completed but no stats available
+  useEffect(() => {
+    if (game && !hasSynced && (game.status === 'post' || game.status_detail?.includes('Final')) && (!playerStats || playerStats.length === 0) && !statsLoading) {
+      setHasSynced(true);
+      syncMutation.mutate(eventId || '', {
+        onSuccess: () => {
+          toast.success('Game stats synced!');
+        },
+        onError: () => {
+          // Silent fail - stats may not be available yet
+        }
+      });
+    }
+  }, [game, playerStats, statsLoading, hasSynced, eventId, syncMutation]);
+
+  const handleManualSync = () => {
+    if (eventId) {
+      syncMutation.mutate(eventId, {
+        onSuccess: (data) => {
+          toast.success(data?.message || 'Game synced!');
+          refetchGame();
+          refetchStats();
+        },
+        onError: () => {
+          toast.error('Failed to sync game data');
+        }
+      });
+    }
+  };
 
   if (gameLoading) {
     return (
@@ -214,13 +267,24 @@ const Matchup = () => {
             {/* Top Performers */}
             <Card className="bg-card/30 border-border/30">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" />
-                  Top Performers
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-primary" />
+                    Top Performers
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleManualSync}
+                    disabled={syncMutation.isPending}
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+                    {syncMutation.isPending ? 'Syncing...' : 'Refresh'}
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {statsLoading ? (
+                {statsLoading || syncMutation.isPending ? (
                   <div className="space-y-3">
                     {[...Array(5)].map((_, i) => (
                       <Skeleton key={i} className="h-20 w-full" />
@@ -236,7 +300,7 @@ const Matchup = () => {
                   <div className="text-center py-8 text-muted-foreground">
                     <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
                     <p>No player stats available for this game yet.</p>
-                    <p className="text-sm">Stats will appear after the game starts.</p>
+                    <p className="text-sm">Stats will appear after the game ends. Click Refresh to check for updates.</p>
                   </div>
                 )}
               </CardContent>
