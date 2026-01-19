@@ -1,18 +1,20 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Receipt, Search, X, Layers } from 'lucide-react';
+import { Search, Layers, X } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import SearchBar from '@/components/SearchBar';
 import { SearchResult } from '@/hooks/useAutocomplete';
 import { useBetSlip } from '@/contexts/BetSlipContext';
+import { useAuth } from '@/hooks/useAuth';
 
-interface BetSlipButtonProps {
+interface NavButtonsProps {
   showSearch?: boolean;
 }
 
-const BetSlipButton = ({ showSearch = true }: BetSlipButtonProps) => {
+const NavButtons = ({ showSearch = true }: NavButtonsProps) => {
   const navigate = useNavigate();
-  const { legs, parlays } = useBetSlip();
+  const { parlays } = useBetSlip();
+  const { user, loading: authLoading } = useAuth();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   const handleSelect = (result: SearchResult) => {
@@ -26,8 +28,8 @@ const BetSlipButton = ({ showSearch = true }: BetSlipButtonProps) => {
 
   return (
     <>
-      {/* Fixed buttons container */}
-      <div className="fixed top-4 right-4 z-50 flex gap-2">
+      {/* Fixed buttons container - top left */}
+      <div className="fixed top-4 left-4 z-50 flex gap-2">
         {showSearch && (
           <Button
             onClick={() => setIsSearchOpen(true)}
@@ -38,33 +40,24 @@ const BetSlipButton = ({ showSearch = true }: BetSlipButtonProps) => {
             <Search className="w-5 h-5" />
           </Button>
         )}
-        <Button
-          onClick={() => navigate('/parlays')}
-          variant="outline"
-          className="gap-2 shadow-lg bg-background/80 backdrop-blur-sm"
-          size="lg"
-        >
-          <Layers className="w-5 h-5" />
-          Parlays
-          {parlays.length > 0 && (
-            <span className="ml-1 bg-primary text-primary-foreground px-2 py-0.5 rounded-full text-sm font-bold">
-              {parlays.length}
-            </span>
-          )}
-        </Button>
-        <Button
-          onClick={() => navigate('/betslip')}
-          className="gap-2 shadow-lg"
-          size="lg"
-        >
-          <Receipt className="w-5 h-5" />
-          BetSlip
-          {legs.length > 0 && (
-            <span className="ml-1 bg-background text-primary px-2 py-0.5 rounded-full text-sm font-bold">
-              {legs.length}
-            </span>
-          )}
-        </Button>
+        
+        {/* Parlays button - only show when user is logged in */}
+        {!authLoading && user && (
+          <Button
+            onClick={() => navigate('/parlays')}
+            variant="outline"
+            className="gap-2 shadow-lg bg-background/80 backdrop-blur-sm"
+            size="lg"
+          >
+            <Layers className="w-5 h-5" />
+            Parlays
+            {parlays.length > 0 && (
+              <span className="ml-1 bg-primary text-primary-foreground px-2 py-0.5 rounded-full text-sm font-bold">
+                {parlays.length}
+              </span>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Search Modal */}
@@ -102,4 +95,4 @@ const BetSlipButton = ({ showSearch = true }: BetSlipButtonProps) => {
   );
 };
 
-export default BetSlipButton;
+export default NavButtons;
