@@ -234,6 +234,7 @@ export type Database = {
           name: string
           pnl: number | null
           updated_at: string
+          user_id: string | null
           user_ip: string
         }
         Insert: {
@@ -243,6 +244,7 @@ export type Database = {
           name: string
           pnl?: number | null
           updated_at?: string
+          user_id?: string | null
           user_ip: string
         }
         Update: {
@@ -252,6 +254,7 @@ export type Database = {
           name?: string
           pnl?: number | null
           updated_at?: string
+          user_id?: string | null
           user_ip?: string
         }
         Relationships: []
