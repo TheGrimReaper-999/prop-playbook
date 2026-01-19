@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Check } from 'lucide-react';
+import { ArrowLeft, Plus, Check, ChevronRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -209,7 +209,31 @@ interface RecentGamesProps {
   isLoading: boolean;
 }
 
+// Helper to normalize matchup display to "vs OPP" format
+const formatMatchup = (game: GameLogEntry): string => {
+  // Extract opponent abbreviation - matchup might be "vs LAL", "@ BOS", etc.
+  // We want to normalize to always show "vs OPP"
+  const matchup = game.matchup || '';
+  
+  // Try to extract the opponent abbreviation from the matchup string
+  const abbrevMatch = matchup.match(/(?:vs|@)\s*(\w+)/i);
+  if (abbrevMatch && abbrevMatch[1]) {
+    return `vs ${abbrevMatch[1].toUpperCase()}`;
+  }
+  
+  // Fallback: just show "vs" with whatever we have
+  return matchup.replace(/^[@]\s*/i, 'vs ');
+};
+
 const RecentGames = ({ games, isLoading }: RecentGamesProps) => {
+  const navigate = useNavigate();
+
+  const handleGameClick = (gameId: string) => {
+    if (gameId) {
+      navigate(`/matchup/${gameId}`);
+    }
+  };
+
   if (isLoading) {
     return (
       <Card className="bg-card/50 border-border/50">
@@ -244,12 +268,28 @@ const RecentGames = ({ games, isLoading }: RecentGamesProps) => {
                 <th className="text-center p-4 font-semibold">REB</th>
                 <th className="text-center p-4 font-semibold">AST</th>
                 <th className="text-center p-4 font-semibold">Result</th>
+                <th className="w-8"></th>
               </tr>
             </thead>
             <tbody>
               {games.slice(0, 10).map((game, idx) => (
-                <tr key={idx} className="border-b border-border/30 last:border-0 hover:bg-muted/30 transition-colors">
-                  <td className="p-4 font-medium">{game.matchup}</td>
+                <tr 
+                  key={idx} 
+                  className="border-b border-border/30 last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                  onClick={() => handleGameClick(game.gameId)}
+                >
+                  <td className="p-4 font-medium">
+                    <div className="flex items-center gap-2">
+                      {game.opponentLogo && (
+                        <img 
+                          src={game.opponentLogo} 
+                          alt="" 
+                          className="w-6 h-6 object-contain"
+                        />
+                      )}
+                      {formatMatchup(game)}
+                    </div>
+                  </td>
                   <td className="p-4 text-center">{game.pts}</td>
                   <td className="p-4 text-center">{game.reb}</td>
                   <td className="p-4 text-center">{game.ast}</td>
@@ -259,6 +299,9 @@ const RecentGames = ({ games, isLoading }: RecentGamesProps) => {
                     }`}>
                       {game.wl}
                     </span>
+                  </td>
+                  <td className="p-2">
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
                   </td>
                 </tr>
               ))}
