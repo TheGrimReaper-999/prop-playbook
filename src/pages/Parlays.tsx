@@ -105,8 +105,8 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle,
   const [pnlInput, setPnlInput] = useState<string>(parlay.pnl?.toString() ?? '');
   const [isUpdatingPnl, setIsUpdatingPnl] = useState(false);
 
-  // Check if at least one leg is marked as taken
-  const hasAnyTakenLeg = parlay.legs.some(leg => leg.taken === true);
+  // Check if at least one leg is marked as taken (treat undefined as taken)
+  const hasAnyTakenLeg = parlay.legs.some(leg => leg.taken !== false);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -171,9 +171,9 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle,
             <span className="bg-primary/20 text-primary px-2.5 py-1 rounded-full text-xs sm:text-sm font-semibold">
               {parlay.legs.length} Leg{parlay.legs.length !== 1 ? 's' : ''}
             </span>
-            {hasAnyTakenLeg && (
+            {parlay.legs.some(l => l.taken === false) && (
               <span className="bg-blue-500/20 text-blue-500 px-2.5 py-1 rounded-full text-xs sm:text-sm font-semibold">
-                {parlay.legs.filter(l => l.taken).length} Taken
+                {parlay.legs.filter(l => l.taken !== false).length} Taken
               </span>
             )}
             {getStatusBadge(status)}
@@ -190,7 +190,8 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle,
             const legStatus = legStatuses?.get(leg.legId);
             const actualValue = legActualValues?.get(leg.legId);
             const hasResult = legStatus && legStatus !== 'pending';
-            const isTaken = leg.taken === true;
+            // Treat undefined/null taken as true (taken by default)
+            const isTaken = leg.taken !== false;
             
             return (
               <div
