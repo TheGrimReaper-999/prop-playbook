@@ -62,13 +62,18 @@ serve(async (req) => {
         break;
       case 'schedule':
         // Format: YYYYMMDD - API uses Eastern Time dates for NBA games
-        // Add 1 day to UTC date to get current ET date (games scheduled in ET)
         let dateParam = gameDate;
         if (!dateParam) {
+          // Get current date in Eastern Time
           const now = new Date();
-          // Add 5 hours to approximate ET, then add 1 day since NBA uses next-day dating
-          now.setDate(now.getDate() + 1);
-          dateParam = now.toISOString().slice(0, 10).replace(/-/g, '');
+          const etFormatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/New_York',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+          });
+          // en-CA gives YYYY-MM-DD format
+          dateParam = etFormatter.format(now).replace(/-/g, '');
         }
         url = `${BASE_URL}${ENDPOINTS['schedule']}?date=${dateParam}`;
         break;
