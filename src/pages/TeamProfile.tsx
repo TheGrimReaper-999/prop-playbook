@@ -173,7 +173,7 @@ const TeamProfile = () => {
               const playerId = player.id || player.playerId || player.guid || '';
               const playerName = player.fullName || player.playerName || `${player.firstName} ${player.lastName}`;
               const playerImage = player.image || player.headShotUrl;
-              const inSlip = isPlayerInSlip(playerId);
+              const inSlip = isPlayerInSlip(playerId, playerName);
               
               return (
                 <Card 

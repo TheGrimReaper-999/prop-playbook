@@ -69,7 +69,7 @@ interface BetSlipContextType {
   duplicateLeg: (legId: string) => void;
   updateLegDetails: (legId: string, details: Partial<LegDetails>) => void;
   setLegStats: (stats: Map<string, LegStats>) => void;
-  isPlayerInSlip: (id: string) => boolean;
+  isPlayerInSlip: (id: string, name?: string) => boolean;
   clearSlip: () => void;
   // Legacy support for player-based operations
   players: BetSlipPlayer[];
@@ -222,8 +222,11 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   }, []);
 
-  const isPlayerInSlip = useCallback((id: string) => {
-    return legs.some((leg) => leg.player.id === id);
+  const isPlayerInSlip = useCallback((id: string, name?: string) => {
+    return legs.some((leg) => 
+      leg.player.id === id || 
+      (name && leg.player.name.toLowerCase() === name.toLowerCase())
+    );
   }, [legs]);
 
   const clearSlip = useCallback(() => {
