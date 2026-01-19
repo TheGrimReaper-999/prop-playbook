@@ -195,6 +195,172 @@ serve(async (req) => {
       }
     }
 
+    // ==================== PHASE 1.5: PRIORITIZE RECENT INCOMPLETE GAMES ====================
+    // Find games from last 3 days with less than 16 players and sync those team's players first
+    if (action === 'full-sync' || action === 'recent-games-sync') {
+      const { data: incompleteGames } = await supabase
+        .from('nba_fixtures')
+        .select('event_id, home_team_name, away_team_name')
+        .eq('status', 'post')
+        .gte('game_date', new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString())
+        .order('game_date', { ascending: false });
+
+      if (incompleteGames) {
+        // Check which games need more stats
+        const gamesNeedingStats: Array<{ event_id: string; home_team: string; away_team: string; count: number }> = [];
+        
+        for (const game of incompleteGames) {
+          const { count } = await supabase
+            .from('nba_player_stats')
+            .select('id', { count: 'exact', head: true })
+            .eq('event_id', game.event_id);
+
+          if (!count || count < 16) {
+            gamesNeedingStats.push({
+              event_id: game.event_id,
+              home_team: game.home_team_name || '',
+              away_team: game.away_team_name || '',
+              count: count || 0,
+            });
+          }
+        }
+
+        console.log(`Found ${gamesNeedingStats.length} recent games needing more stats`);
+
+        // Get players from teams in incomplete games
+        const teamsToSync = new Set<string>();
+        for (const game of gamesNeedingStats.slice(0, 5)) { // Limit to top 5 most recent
+          if (game.home_team) teamsToSync.add(game.home_team);
+          if (game.away_team) teamsToSync.add(game.away_team);
+        }
+
+        if (teamsToSync.size > 0) {
+          // Get players from these teams
+          const teamNames = Array.from(teamsToSync);
+          const { data: teamPlayers } = await supabase
+            .from('nba_players')
+            .select('id, full_name, api_player_id, team_name')
+            .not('api_player_id', 'is', null)
+            .in('team_name', teamNames);
+
+          if (teamPlayers) {
+            // Get existing stat counts for these players
+            const playerIds = teamPlayers.map(p => p.id);
+            const { data: existingStats } = await supabase
+              .from('nba_player_stats')
+              .select('player_id')
+              .in('player_id', playerIds);
+
+            const statCountMap = new Map<string, number>();
+            if (existingStats) {
+              for (const stat of existingStats) {
+                const count = statCountMap.get(stat.player_id!) || 0;
+                statCountMap.set(stat.player_id!, count + 1);
+              }
+            }
+
+            // Prioritize players with fewer stats
+            const sortedPlayers = teamPlayers
+              .map(p => ({ ...p, stat_count: statCountMap.get(p.id) || 0 }))
+              .sort((a, b) => a.stat_count - b.stat_count);
+
+            for (const player of sortedPlayers) {
+              if (results.apiCallsUsed >= maxApiCalls) break;
+              if (player.stat_count >= 40) continue; // Skip players with full season
+
+              console.log(`[PRIORITY] Syncing ${player.full_name} from ${player.team_name} (${player.stat_count} stats)`);
+
+              try {
+                const response = await fetch(`${BASE_URL}/nba-player-gamelog?playerid=${player.api_player_id}`, {
+                  method: 'GET',
+                  headers: {
+                    'x-rapidapi-host': RAPIDAPI_HOST,
+                    'x-rapidapi-key': apiKey,
+                  },
+                });
+                results.apiCallsUsed++;
+
+                if (response.ok) {
+                  const gamelogData = await response.json();
+                  const gamelog = gamelogData?.response?.gamelog;
+
+                  if (gamelog?.events && gamelog?.seasonTypes) {
+                    const events = gamelog.events;
+                    const regularSeason = gamelog.seasonTypes?.find(
+                      (s: { displayName: string }) => s.displayName?.includes('Regular Season')
+                    );
+
+                    if (regularSeason?.categories) {
+                      const allStats: PlayerStats[] = [];
+
+                      for (const category of regularSeason.categories) {
+                        if (category.type === 'event' && category.events) {
+                          for (const gameEvent of category.events) {
+                            const eventId = gameEvent.eventId;
+                            const eventData = events[eventId];
+
+                            if (eventData && gameEvent.stats) {
+                              const isHome = eventData.homeTeamId === eventData.team?.id;
+
+                              await supabase.from('nba_fixtures').upsert({
+                                event_id: eventId,
+                                game_date: eventData.gameDate,
+                                home_team_id: eventData.homeTeamId || '',
+                                home_team_name: isHome ? eventData.team?.displayName || '' : eventData.opponent?.displayName || '',
+                                home_team_abbrev: isHome ? eventData.team?.abbreviation || '' : eventData.opponent?.abbreviation || '',
+                                home_team_logo: isHome ? eventData.team?.logo : eventData.opponent?.logo,
+                                home_team_score: parseInt(eventData.homeTeamScore || '0', 10),
+                                away_team_id: eventData.awayTeamId || '',
+                                away_team_name: !isHome ? eventData.team?.displayName || '' : eventData.opponent?.displayName || '',
+                                away_team_abbrev: !isHome ? eventData.team?.abbreviation || '' : eventData.opponent?.abbreviation || '',
+                                away_team_logo: !isHome ? eventData.team?.logo : eventData.opponent?.logo,
+                                away_team_score: parseInt(eventData.awayTeamScore || '0', 10),
+                                status: 'post',
+                                status_detail: eventData.score || 'Final',
+                                season: '2025-26',
+                              }, { onConflict: 'event_id' });
+
+                              const stats = parseGameStats(
+                                eventId,
+                                eventData.gameDate,
+                                gameEvent.stats,
+                                player.full_name,
+                                player.id
+                              );
+                              allStats.push(stats);
+                            }
+                          }
+                        }
+                      }
+
+                      if (allStats.length > 0) {
+                        await supabase
+                          .from('nba_player_stats')
+                          .delete()
+                          .eq('player_id', player.id);
+
+                        await supabase
+                          .from('nba_player_stats')
+                          .insert(allStats);
+
+                        results.playerStatsAdded += allStats.length;
+                        results.boxscoresSynced++;
+                        console.log(`[PRIORITY] Added ${allStats.length} stats for ${player.full_name}`);
+                      }
+                    }
+                  }
+                }
+              } catch (err) {
+                results.errors.push(`Priority sync failed for ${player.full_name}`);
+              }
+
+              await delay(150);
+            }
+          }
+        }
+      }
+    }
+
     // ==================== PHASE 2: SYNC PLAYER GAMELOGS ====================
     // Strategy: Fetch gamelogs for players who have the fewest stats in DB
     // One gamelog call returns ALL games for a player - much more efficient than boxscore

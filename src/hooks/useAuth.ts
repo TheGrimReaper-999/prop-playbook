@@ -53,6 +53,19 @@ export function useAuth() {
     return { error };
   }, []);
 
+  const resendVerification = useCallback(async (email: string) => {
+    const redirectUrl = `${window.location.origin}/`;
+    
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: redirectUrl
+      }
+    });
+    return { error };
+  }, []);
+
   return {
     user,
     session,
@@ -60,5 +73,6 @@ export function useAuth() {
     signUp,
     signIn,
     signOut,
+    resendVerification,
   };
 }

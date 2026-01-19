@@ -18,7 +18,7 @@ const authSchema = z.object({
 
 const Auth = () => {
   const navigate = useNavigate();
-  const { user, loading, signIn, signUp } = useAuth();
+  const { user, loading, signIn, signUp, resendVerification } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,6 +26,7 @@ const Auth = () => {
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [showVerificationMessage, setShowVerificationMessage] = useState(false);
+  const [isResending, setIsResending] = useState(false);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -133,6 +134,10 @@ const Auth = () => {
                 Click the link in the email to verify your account. 
                 Once verified, you can sign in.
               </p>
+              <p className="text-xs text-muted-foreground text-center bg-muted/50 p-3 rounded-lg">
+                <strong>Can't find it?</strong> Check your spam/junk folder. 
+                The email is from <span className="font-mono">noreply@mail.lovable.app</span>
+              </p>
               <div className="space-y-2">
                 <Button 
                   variant="outline" 
@@ -149,9 +154,32 @@ const Auth = () => {
                 <Button 
                   variant="ghost" 
                   className="w-full text-muted-foreground"
-                  onClick={() => setShowVerificationMessage(false)}
+                  disabled={isResending}
+                  onClick={async () => {
+                    setIsResending(true);
+                    try {
+                      const { error } = await resendVerification(email);
+                      if (error) {
+                        toast.error(error.message);
+                      } else {
+                        toast.success('Verification email resent! Check your inbox.');
+                      }
+                    } finally {
+                      setIsResending(false);
+                    }
+                  }}
                 >
-                  Didn't receive email? Try again
+                  {isResending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Resending...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="w-4 h-4 mr-2" />
+                      Resend Verification Email
+                    </>
+                  )}
                 </Button>
               </div>
             </CardContent>
