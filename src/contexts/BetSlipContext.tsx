@@ -139,17 +139,17 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return;
       }
 
-      // Transform database format to app format
+      // Transform database format to app format (be defensive about JSON column shapes)
       const transformedParlays: SavedParlay[] = (data || []).map((p: {
         id: string;
         name: string;
-        legs: ParlayLeg[];
+        legs: unknown;
         created_at: string;
         pnl?: number | null;
       }) => ({
         id: p.id,
         name: p.name,
-        legs: p.legs as ParlayLeg[],
+        legs: Array.isArray(p.legs) ? (p.legs as ParlayLeg[]) : [],
         createdAt: p.created_at,
         pnl: p.pnl,
       }));
@@ -273,7 +273,7 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const newParlay: SavedParlay = {
         id: data.id,
         name: data.name,
-        legs: data.legs as ParlayLeg[],
+        legs: Array.isArray(data.legs) ? (data.legs as ParlayLeg[]) : parlayLegs,
         createdAt: data.created_at,
       };
 
