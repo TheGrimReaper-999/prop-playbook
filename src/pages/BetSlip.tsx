@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select';
 import { useBetSlip, AltLine, LegStats } from '@/contexts/BetSlipContext';
 import { toast } from '@/hooks/use-toast';
-import { fetchStatsForLegs, extractStatValues } from '@/hooks/usePlayerStats';
+import { fetchStatsForLegs } from '@/hooks/usePlayerStats';
 
 const STAT_TYPES = [
   { value: 'pts', label: 'Points (PTS)' },
@@ -217,12 +217,12 @@ const BetSlip = () => {
     try {
       // Fetch stats for all legs
       toast({
-        title: "Loading verified stats",
-        description: `Syncing last 10 games for ${legs.length} player${legs.length !== 1 ? 's' : ''}...`,
+        title: "Working my magic",
+        description: `Crunching numbers for ${legs.length} player${legs.length !== 1 ? 's' : ''}...`,
       });
-      
+
       const statsMap = await fetchStatsForLegs(legs);
-      
+
       // Convert to the format expected by context
       const legStatsMap = new Map<string, LegStats>();
       statsMap.forEach((stats, legId) => {
@@ -233,43 +233,38 @@ const BetSlip = () => {
           error: stats.error,
         });
       });
-      
+
       setLegStats(legStatsMap);
-      
-      const successCount = Array.from(statsMap.values()).filter(s => s.games.length > 0).length;
+
+      const successCount = Array.from(statsMap.values()).filter((s) => s.games.length > 0).length;
       const failedPlayers = legs
-        .filter(leg => {
+        .filter((leg) => {
           const stats = statsMap.get(leg.legId);
           return !stats || stats.games.length === 0;
         })
-        .map(leg => leg.player.name);
-      
-      if (successCount === 0) {
+        .map((leg) => leg.player.name);
+
+      // Hard gate: do not proceed unless EVERY leg has verified data
+      if (successCount < legs.length) {
         toast({
-          title: "No verified stats available",
-          description: "Could not fetch any player stats. Please try again later.",
+          title: "Can't compute yet",
+          description: `Missing verified data for: ${failedPlayers.slice(0, 4).join(', ')}${failedPlayers.length > 4 ? '…' : ''}. Please retry.`,
           variant: "destructive",
         });
-        // Don't navigate - stay on page so user can retry
         return;
-      } else if (successCount < legs.length) {
-        toast({
-          title: "Partial stats loaded",
-          description: `Loaded verified stats for ${successCount} of ${legs.length} players. Missing: ${failedPlayers.slice(0, 3).join(', ')}${failedPlayers.length > 3 ? '...' : ''}`,
-        });
-      } else {
-        toast({
-          title: "Stats loaded",
-          description: `Verified game data for all ${successCount} players.`,
-        });
       }
-      
+
+      toast({
+        title: "All set",
+        description: "Stats are ready. Let’s compute.",
+      });
+
       navigate('/decisions');
     } catch (error) {
       console.error('Error fetching stats:', error);
       toast({
-        title: "Error loading stats",
-        description: "Could not fetch player stats. Please try again.",
+        title: "Error",
+        description: "Couldn't load verified stats. Please try again.",
         variant: "destructive",
       });
       // Don't navigate on error

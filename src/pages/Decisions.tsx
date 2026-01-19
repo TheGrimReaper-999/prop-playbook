@@ -251,45 +251,54 @@ const Decisions = () => {
   // Auto-fetch stats if missing when page loads
   useEffect(() => {
     if (legs.length === 0 || statsLoadAttempted) return;
-    
+
     if (missingStats.length > 0) {
       const loadStats = async () => {
         setIsLoadingStats(true);
         setStatsLoadAttempted(true);
-        
+
         try {
           console.log(`[Decisions] Loading stats for ${legs.length} legs...`);
           const statsMap = await fetchStatsForLegs(legs);
-          
+
           // Merge with existing stats
           const mergedStats = new Map(legStats);
           statsMap.forEach((value, key) => {
             mergedStats.set(key, value);
           });
-          
+
           setLegStats(mergedStats);
-          
-          const successCount = Array.from(statsMap.values()).filter(s => s.games.length > 0).length;
+
+          const successCount = Array.from(statsMap.values()).filter((s) => s.games.length > 0).length;
           console.log(`[Decisions] Loaded stats: ${successCount}/${legs.length} players have data`);
-          
+
+          // Hard gate: if anything is missing, keep the user here and show retry
           if (successCount < legs.length) {
+            const failedPlayers = legs
+              .filter((leg) => {
+                const s = statsMap.get(leg.legId);
+                return !s || s.games.length === 0;
+              })
+              .map((leg) => leg.player.name);
+
             toast({
-              title: "Partial stats loaded",
-              description: `Loaded verified stats for ${successCount} of ${legs.length} players.`,
+              title: "Can't compute yet",
+              description: `Missing verified data for: ${failedPlayers.slice(0, 4).join(', ')}${failedPlayers.length > 4 ? '…' : ''}.`,
+              variant: 'destructive',
             });
           }
         } catch (error) {
           console.error('[Decisions] Error loading stats:', error);
           toast({
-            title: "Error loading stats",
-            description: "Some player stats could not be loaded.",
-            variant: "destructive",
+            title: 'Error',
+            description: "Couldn't load verified stats. Please try again.",
+            variant: 'destructive',
           });
         } finally {
           setIsLoadingStats(false);
         }
       };
-      
+
       loadStats();
     } else {
       setStatsLoadAttempted(true);
@@ -459,17 +468,63 @@ const Decisions = () => {
             </Button>
           </div>
         </div>
-        
+
         <div className="max-w-4xl mx-auto p-6">
           <Card className="bg-card/50 border-border/50">
             <CardContent className="p-12 text-center">
               <div className="w-20 h-20 rounded-full bg-primary/20 mx-auto mb-4 flex items-center justify-center">
                 <Loader2 className="w-10 h-10 text-primary animate-spin" />
               </div>
-              <h2 className="text-xl font-semibold mb-2">Loading Verified Stats</h2>
-              <p className="text-muted-foreground">
-                Fetching real game data for {legs.length} player{legs.length !== 1 ? 's' : ''}...
-              </p>
+              <h2 className="text-xl font-semibold mb-2">Working my magic</h2>
+              <p className="text-muted-foreground">Crunching numbers for {legs.length} player{legs.length !== 1 ? 's' : ''}...</p>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    );
+  }
+
+  // If we already tried and still have missing stats, hard-gate the page with retry.
+  if (statsLoadAttempted && missingStats.length > 0) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="bg-gradient-to-b from-primary/20 to-background p-6">
+          <div className="max-w-4xl mx-auto">
+            <Button
+              variant="ghost"
+              onClick={() => navigate('/betslip')}
+              className="mb-6 hover:bg-primary/10"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to BetSlip
+            </Button>
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto p-6">
+          <Card className="bg-card/50 border-border/50">
+            <CardContent className="p-8">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5">
+                  <AlertCircle className="w-5 h-5 text-destructive" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-lg font-semibold">Can’t compute yet</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Missing verified data for {missingStats.length} player{missingStats.length !== 1 ? 's' : ''}. Tap retry.
+                  </p>
+                  <div className="mt-4 flex gap-2">
+                    <Button
+                      onClick={() => {
+                        setStatsLoadAttempted(false);
+                      }}
+                    >
+                      Retry
+                    </Button>
+                    <Button variant="outline" onClick={() => navigate('/betslip')}>Edit BetSlip</Button>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
