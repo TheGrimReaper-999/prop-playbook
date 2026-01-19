@@ -354,9 +354,10 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateParlayLegs = useCallback(async (parlayId: string, updatedLegs: ParlayLeg[]) => {
     try {
+      // POST workaround (some environments block PUT requests)
       const { error } = await supabase.functions.invoke('parlays', {
-        method: 'PUT',
-        body: { id: parlayId, legs: updatedLegs },
+        method: 'POST',
+        body: { action: 'update', id: parlayId, legs: updatedLegs },
       });
 
       if (error) {
