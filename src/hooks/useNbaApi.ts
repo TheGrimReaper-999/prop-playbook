@@ -392,22 +392,56 @@ export const useTeamInfoByName = (teamName: string | null) => {
   return { data: teamInfo, isLoading };
 };
 
-// Fetch today's schedule/fixtures
+// Fetch schedule for a given local date
+// We fetch two days from the API (requested date and next day) to handle timezone differences,
+// then filter client-side to only show games that fall on the user's local date
 export const useSchedule = (gameDate?: string) => {
   return useQuery({
     queryKey: ['nba-schedule', gameDate],
     queryFn: async (): Promise<ScheduleGame[]> => {
-      // Let edge function handle date logic - only pass if explicitly provided
-      const { data, error } = await supabase.functions.invoke('nba-stats', {
-        body: { action: 'schedule', gameDate }
+      // Parse the requested date string (YYYYMMDD) into components
+      const year = parseInt(gameDate?.slice(0, 4) || '2026');
+      const month = parseInt(gameDate?.slice(4, 6) || '1') - 1;
+      const day = parseInt(gameDate?.slice(6, 8) || '1');
+      const requestedLocalDate = new Date(year, month, day);
+      
+      // Calculate next day for fetching (to catch games that span UTC midnight)
+      const nextDay = new Date(requestedLocalDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const nextDayStr = `${nextDay.getFullYear()}${String(nextDay.getMonth() + 1).padStart(2, '0')}${String(nextDay.getDate()).padStart(2, '0')}`;
+      
+      // Fetch both days in parallel
+      const [todayResult, nextDayResult] = await Promise.all([
+        supabase.functions.invoke('nba-stats', {
+          body: { action: 'schedule', gameDate }
+        }),
+        supabase.functions.invoke('nba-stats', {
+          body: { action: 'schedule', gameDate: nextDayStr }
+        })
+      ]);
+      
+      if (todayResult.error) throw todayResult.error;
+      
+      // Combine events from both days
+      const todayEvents = todayResult.data?.response?.Events || [];
+      const nextDayEvents = nextDayResult.data?.response?.Events || [];
+      const allEvents = [...todayEvents, ...nextDayEvents];
+      
+      // Remove duplicates by event ID
+      const uniqueEvents = allEvents.filter((event: any, index: number, self: any[]) =>
+        index === self.findIndex((e: any) => e.id === event.id)
+      );
+      
+      // Filter to only include games that fall on the user's local date
+      const targetDateStr = requestedLocalDate.toDateString();
+      
+      const filteredEvents = uniqueEvents.filter((event: any) => {
+        const gameUtcDate = new Date(event.date);
+        const gameLocalDate = gameUtcDate.toDateString();
+        return gameLocalDate === targetDateStr;
       });
       
-      if (error) throw error;
-      
-      // Parse the schedule response - events are in response.Events
-      const events = data?.response?.Events || [];
-      
-      return events.map((event: any) => {
+      return filteredEvents.map((event: any) => {
         // Find home and away teams from competitors array
         const homeTeamData = event.competitors?.find((c: any) => c.isHome === true) || {};
         const awayTeamData = event.competitors?.find((c: any) => c.isHome === false) || {};
