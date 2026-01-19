@@ -5,26 +5,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface ParlayLeg {
-  playerId: string;
-  playerName: string;
-  teamName: string;
-  stat: string;
-  line: number;
-  pick: 'over' | 'under';
-  odds: number;
-  modelProb: number;
-  edge: number;
-}
-
-interface Parlay {
-  id: string;
-  name: string;
-  legs: ParlayLeg[];
-  created_at: string;
-  updated_at: string;
-}
-
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -33,27 +13,49 @@ Deno.serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // Get user IP from headers (x-forwarded-for or x-real-ip)
-    const forwardedFor = req.headers.get('x-forwarded-for');
-    const realIp = req.headers.get('x-real-ip');
-    const userIp = forwardedFor?.split(',')[0]?.trim() || realIp || 'unknown';
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     
-    console.log(`[parlays] Request from IP: ${userIp}, Method: ${req.method}`);
+    // Get auth header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      console.log('[parlays] No auth header provided');
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      });
+    }
+
+    // Create authenticated client
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } }
+    });
+
+    // Verify user
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    
+    if (claimsError || !claimsData?.claims) {
+      console.error('[parlays] Auth error:', claimsError);
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      });
+    }
+
+    const userId = claimsData.claims.sub as string;
+    console.log(`[parlays] Request from user: ${userId}, Method: ${req.method}`);
 
     const url = new URL(req.url);
     const method = req.method;
 
-    // GET - Fetch all parlays for this IP
+    // GET - Fetch all parlays for this user
     if (method === 'GET') {
-      console.log(`[parlays] Fetching parlays for IP: ${userIp}`);
+      console.log(`[parlays] Fetching parlays for user: ${userId}`);
       
       const { data, error } = await supabase
         .from('parlays')
         .select('*')
-        .eq('user_ip', userIp)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -73,12 +75,13 @@ Deno.serve(async (req) => {
       const body = await req.json();
       const { name, legs } = body;
 
-      console.log(`[parlays] Creating parlay "${name}" with ${legs?.length || 0} legs`);
+      console.log(`[parlays] Creating parlay "${name}" with ${legs?.length || 0} legs for user: ${userId}`);
 
       const { data, error } = await supabase
         .from('parlays')
         .insert({
-          user_ip: userIp,
+          user_id: userId,
+          user_ip: 'authenticated', // Legacy field
           name: name || 'Untitled Parlay',
           legs: legs || [],
         })
@@ -98,10 +101,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // PUT - Update a parlay (rename)
+    // PUT - Update a parlay
     if (method === 'PUT') {
       const body = await req.json();
-      const { id, name, legs } = body;
+      const { id, name, legs, pnl } = body;
 
       if (!id) {
         return new Response(JSON.stringify({ error: 'Parlay ID is required' }), {
@@ -110,19 +113,19 @@ Deno.serve(async (req) => {
         });
       }
 
-      console.log(`[parlays] Updating parlay ${id}`);
+      console.log(`[parlays] Updating parlay ${id} for user: ${userId}`);
 
       // Build update object
       const updateData: Record<string, unknown> = {};
       if (name !== undefined) updateData.name = name;
       if (legs !== undefined) updateData.legs = legs;
-      if (body.pnl !== undefined) updateData.pnl = body.pnl;
+      if (pnl !== undefined) updateData.pnl = pnl;
 
       const { data, error } = await supabase
         .from('parlays')
         .update(updateData)
         .eq('id', id)
-        .eq('user_ip', userIp) // Ensure user can only update their own
+        .eq('user_id', userId)
         .select()
         .single();
 
@@ -159,13 +162,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      console.log(`[parlays] Deleting parlay ${parlayId}`);
+      console.log(`[parlays] Deleting parlay ${parlayId} for user: ${userId}`);
 
       const { error } = await supabase
         .from('parlays')
         .delete()
         .eq('id', parlayId)
-        .eq('user_ip', userIp); // Ensure user can only delete their own
+        .eq('user_id', userId);
 
       if (error) {
         console.error(`[parlays] Error deleting parlay:`, error);

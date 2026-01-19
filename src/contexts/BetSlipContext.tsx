@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { User, Session } from '@supabase/supabase-js';
 import { GameLogEntry } from '@/hooks/useNbaApi';
 import { StatValues } from '@/hooks/usePlayerStats';
 import { supabase } from '@/integrations/supabase/client';
@@ -101,9 +102,31 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [legStats, setLegStats] = useState<Map<string, LegStats>>(new Map());
   const [parlays, setParlays] = useState<SavedParlay[]>([]);
   const [parlaysLoading, setParlaysLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(null);
 
-  // Fetch parlays from database on mount
+  // Listen for auth state changes
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+      }
+    );
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch parlays from database when authenticated
   const fetchParlays = useCallback(async () => {
+    if (!session) {
+      setParlays([]);
+      setParlaysLoading(false);
+      return;
+    }
+
     try {
       setParlaysLoading(true);
       const { data, error } = await supabase.functions.invoke('parlays', {
@@ -112,6 +135,7 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       if (error) {
         console.error('Error fetching parlays:', error);
+        setParlays([]);
         return;
       }
 
@@ -133,10 +157,11 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setParlays(transformedParlays);
     } catch (err) {
       console.error('Error fetching parlays:', err);
+      setParlays([]);
     } finally {
       setParlaysLoading(false);
     }
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     fetchParlays();

@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil, Loader2, DollarSign } from 'lucide-react';
+import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil, Loader2, DollarSign, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useBetSlip, SavedParlay, ParlayLeg } from '@/contexts/BetSlipContext';
 import { toast } from '@/hooks/use-toast';
 import { useParlayStatus, ParlayStatus, LegStatus } from '@/hooks/useParlayStatus';
+import { useAuth } from '@/hooks/useAuth';
 const STAT_TYPE_LABELS: Record<string, string> = {
   pts: 'Points',
   reb: 'Rebounds',
@@ -251,6 +252,7 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending
 
 const Parlays = () => {
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const { parlays, parlaysLoading, deleteParlay, renameParlay, updateParlayPnl, clearParlays } = useBetSlip();
   const { data: parlayStatuses } = useParlayStatus(parlays);
   
@@ -259,6 +261,54 @@ const Parlays = () => {
   const [newParlayName, setNewParlayName] = useState('');
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
+
+  // Show auth prompt if not logged in
+  if (!authLoading && !user) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="bg-gradient-to-b from-primary/20 to-background p-6">
+          <div className="max-w-4xl mx-auto">
+            <Button
+              variant="ghost"
+              onClick={() => navigate('/')}
+              className="mb-6 hover:bg-primary/10"
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Home
+            </Button>
+
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-xl bg-primary/20 flex items-center justify-center">
+                <Layers className="w-8 h-8 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-4xl font-black tracking-tight">Parlays</h1>
+                <p className="text-muted-foreground">Sign in to save your parlays</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto p-6">
+          <Card className="bg-card/50 border-border/50">
+            <CardContent className="p-12 text-center">
+              <div className="w-20 h-20 rounded-full bg-primary/20 mx-auto mb-4 flex items-center justify-center">
+                <LogIn className="w-10 h-10 text-primary" />
+              </div>
+              <h2 className="text-xl font-semibold mb-2">Sign in required</h2>
+              <p className="text-muted-foreground mb-6">
+                Create an account or sign in to save and track your parlays
+              </p>
+              <Button onClick={() => navigate('/auth')} size="lg">
+                <LogIn className="w-4 h-4 mr-2" />
+                Sign In / Sign Up
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    );
+  }
 
   const handleClearAll = () => {
     if (parlays.length === 0) return;
