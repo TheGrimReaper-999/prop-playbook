@@ -4,6 +4,7 @@ import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calen
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useBetSlip, SavedParlay, ParlayLeg } from '@/contexts/BetSlipContext';
 import { toast } from '@/hooks/use-toast';
@@ -93,15 +94,19 @@ interface ParlayCardProps {
   onDelete: (id: string) => void;
   onRename: (id: string) => void;
   onPnlUpdate: (id: string, pnl: number | null) => void;
+  onLegTakenToggle: (parlayId: string, legId: string, taken: boolean) => void;
   status?: ParlayStatus;
   legStatuses?: Map<string, LegStatus>;
   legActualValues?: Map<string, number | undefined>;
   isDeleting?: boolean;
 }
 
-const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending', legStatuses, legActualValues, isDeleting }: ParlayCardProps) => {
+const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle, status = 'pending', legStatuses, legActualValues, isDeleting }: ParlayCardProps) => {
   const [pnlInput, setPnlInput] = useState<string>(parlay.pnl?.toString() ?? '');
   const [isUpdatingPnl, setIsUpdatingPnl] = useState(false);
+
+  // Check if at least one leg is marked as taken
+  const hasAnyTakenLeg = parlay.legs.some(leg => leg.taken === true);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -166,6 +171,11 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending
             <span className="bg-primary/20 text-primary px-2.5 py-1 rounded-full text-xs sm:text-sm font-semibold">
               {parlay.legs.length} Leg{parlay.legs.length !== 1 ? 's' : ''}
             </span>
+            {hasAnyTakenLeg && (
+              <span className="bg-blue-500/20 text-blue-500 px-2.5 py-1 rounded-full text-xs sm:text-sm font-semibold">
+                {parlay.legs.filter(l => l.taken).length} Taken
+              </span>
+            )}
             {getStatusBadge(status)}
           </div>
         </div>
@@ -180,6 +190,7 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending
             const legStatus = legStatuses?.get(leg.legId);
             const actualValue = legActualValues?.get(leg.legId);
             const hasResult = legStatus && legStatus !== 'pending';
+            const isTaken = leg.taken === true;
             
             return (
               <div
@@ -188,15 +199,21 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending
                   legStatus === 'win' ? 'bg-green-500/10 border border-green-500/30' :
                   legStatus === 'loss' ? 'bg-red-500/10 border border-red-500/30' :
                   'bg-background/50'
-                }`}
+                } ${!isTaken ? 'opacity-60' : ''}`}
               >
-                {/* Top row on mobile: index + player name */}
+                {/* Top row on mobile: checkbox + index + player name */}
                 <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                  <Checkbox
+                    checked={isTaken}
+                    onCheckedChange={(checked) => onLegTakenToggle(parlay.id, leg.legId, checked === true)}
+                    className="flex-shrink-0"
+                    aria-label={`Mark leg ${index + 1} as taken`}
+                  />
                   <span className="text-xs text-muted-foreground font-medium w-5 sm:w-6 flex-shrink-0">
                     #{index + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm sm:text-base">{leg.player.name}</p>
+                    <p className={`font-medium text-sm sm:text-base ${!isTaken ? 'line-through' : ''}`}>{leg.player.name}</p>
                     <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
                       <span>{STAT_TYPE_LABELS[leg.statType] || leg.statType}</span>
                       <span>•</span>
@@ -225,35 +242,37 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending
           })}
         </div>
 
-        {/* PnL Input */}
-        <div className="mt-4 pt-4 border-t border-border/50 flex items-center gap-3">
-          <DollarSign className="w-5 h-5 text-muted-foreground" />
-          <span className="text-sm font-medium text-muted-foreground">P&L:</span>
-          <div className="relative flex-1 max-w-[150px]">
-            <Input
-              type="text"
-              inputMode="decimal"
-              placeholder="+100 or -50"
-              value={pnlInput}
-              onChange={(e) => setPnlInput(e.target.value)}
-              onBlur={handlePnlBlur}
-              onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-              disabled={isUpdatingPnl}
-              className={`h-9 text-sm ${
-                parlay.pnl && parlay.pnl > 0 ? 'text-green-500' : 
-                parlay.pnl && parlay.pnl < 0 ? 'text-red-500' : ''
-              }`}
-            />
-            {isUpdatingPnl && (
-              <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+        {/* PnL Input - only show if at least one leg is taken */}
+        {hasAnyTakenLeg && (
+          <div className="mt-4 pt-4 border-t border-border/50 flex items-center gap-3">
+            <DollarSign className="w-5 h-5 text-muted-foreground" />
+            <span className="text-sm font-medium text-muted-foreground">P&L:</span>
+            <div className="relative flex-1 max-w-[150px]">
+              <Input
+                type="text"
+                inputMode="decimal"
+                placeholder="+100 or -50"
+                value={pnlInput}
+                onChange={(e) => setPnlInput(e.target.value)}
+                onBlur={handlePnlBlur}
+                onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                disabled={isUpdatingPnl}
+                className={`h-9 text-sm ${
+                  parlay.pnl && parlay.pnl > 0 ? 'text-green-500' : 
+                  parlay.pnl && parlay.pnl < 0 ? 'text-red-500' : ''
+                }`}
+              />
+              {isUpdatingPnl && (
+                <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            {parlay.pnl !== null && parlay.pnl !== undefined && (
+              <span className={`text-sm font-semibold ${parlay.pnl > 0 ? 'text-green-500' : parlay.pnl < 0 ? 'text-red-500' : ''}`}>
+                {parlay.pnl > 0 ? '+' : ''}{parlay.pnl.toFixed(2)}
+              </span>
             )}
           </div>
-          {parlay.pnl !== null && parlay.pnl !== undefined && (
-            <span className={`text-sm font-semibold ${parlay.pnl > 0 ? 'text-green-500' : parlay.pnl < 0 ? 'text-red-500' : ''}`}>
-              {parlay.pnl > 0 ? '+' : ''}{parlay.pnl.toFixed(2)}
-            </span>
-          )}
-        </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -262,7 +281,7 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, status = 'pending
 const Parlays = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const { parlays, parlaysLoading, deleteParlay, renameParlay, updateParlayPnl, clearParlays } = useBetSlip();
+  const { parlays, parlaysLoading, deleteParlay, renameParlay, updateParlayPnl, updateParlayLegs, clearParlays } = useBetSlip();
   const { data: parlayStatuses } = useParlayStatus(parlays);
   
   const [showRenameDialog, setShowRenameDialog] = useState(false);
@@ -314,6 +333,25 @@ const Parlays = () => {
       setRenamingParlayId(parlayId);
       setNewParlayName(parlay.name);
       setShowRenameDialog(true);
+    }
+  };
+
+  const handleLegTakenToggle = async (parlayId: string, legId: string, taken: boolean) => {
+    const parlay = parlays.find(p => p.id === parlayId);
+    if (!parlay) return;
+    
+    const updatedLegs = parlay.legs.map(leg => 
+      leg.legId === legId ? { ...leg, taken } : leg
+    );
+    
+    try {
+      await updateParlayLegs(parlayId, updatedLegs);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update leg. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -515,6 +553,7 @@ const Parlays = () => {
                     onDelete={handleDelete}
                     onRename={handleStartRename}
                     onPnlUpdate={handlePnlUpdate}
+                    onLegTakenToggle={handleLegTakenToggle}
                     status={result?.status}
                     legStatuses={legStatusMap}
                     legActualValues={legActualValuesMap}
