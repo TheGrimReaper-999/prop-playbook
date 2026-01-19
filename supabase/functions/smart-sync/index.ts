@@ -10,11 +10,11 @@ const RAPIDAPI_HOST = 'nba-api-free-data.p.rapidapi.com';
 const BASE_URL = `https://${RAPIDAPI_HOST}`;
 
 // Daily budget: 1000 API calls (20% of 5000)
-// Allocation per run (every 30 mins = 48 runs/day):
-// - Schedule sync: ~3 calls/run (today + yesterday + tomorrow) = 144/day
-// - Boxscore sync: ~15 calls/run for incomplete games = 720/day  
-// - Player linking: ~3 calls/run for players without api_player_id = 144/day
-// Total: ~1008/day (within budget)
+// Strategy: Use player gamelogs (boxscore API returns 404 on free tier)
+// Each gamelog call returns ALL games for a player - very efficient!
+// - 3 schedule calls/day for fixtures
+// - Prioritize players without recent stats - one gamelog call populates ALL their games
+// - Run every 30 mins = 48 runs/day, ~20 calls/run = 960/day
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -195,35 +195,53 @@ serve(async (req) => {
       }
     }
 
-    // ==================== PHASE 2: SYNC BOXSCORES FOR INCOMPLETE GAMES ====================
-    if (action === 'full-sync' || action === 'boxscore-sync') {
-      // Find completed games with incomplete stats (less than 16 players)
-      // Prioritize most recent games first
-      const { data: incompleteGames } = await supabase
-        .from('nba_fixtures')
-        .select('event_id, game_date, home_team_name, away_team_name')
-        .eq('status', 'post')
-        .gte('game_date', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()) // Last 14 days
-        .order('game_date', { ascending: false })
-        .limit(50);
+    // ==================== PHASE 2: SYNC PLAYER GAMELOGS ====================
+    // Strategy: Fetch gamelogs for players who have the fewest stats in DB
+    // One gamelog call returns ALL games for a player - much more efficient than boxscore
+    if (action === 'full-sync' || action === 'gamelog-sync') {
+      // Get all players with api_player_id
+      const { data: allPlayers } = await supabase
+        .from('nba_players')
+        .select('id, full_name, api_player_id, team_name')
+        .not('api_player_id', 'is', null);
 
-      if (incompleteGames) {
-        // Check which games have incomplete stats
-        for (const game of incompleteGames) {
+      // Get stat counts grouped by player_id in a single query
+      const { data: statCounts } = await supabase
+        .from('nba_player_stats')
+        .select('player_id')
+        .not('player_id', 'is', null);
+
+      // Count stats per player
+      const statCountMap = new Map<string, number>();
+      if (statCounts) {
+        for (const stat of statCounts) {
+          const count = statCountMap.get(stat.player_id!) || 0;
+          statCountMap.set(stat.player_id!, count + 1);
+        }
+      }
+
+      if (allPlayers) {
+        // Build list with stat counts
+        const playersWithStatCount = allPlayers.map(p => ({
+          ...p,
+          api_player_id: p.api_player_id!,
+          stat_count: statCountMap.get(p.id) || 0,
+        }));
+
+        // Sort by stat count ascending - prioritize players with fewest stats
+        playersWithStatCount.sort((a, b) => a.stat_count - b.stat_count);
+
+        // Sync gamelogs for players with least stats (limit to 50 to check quickly)
+        for (const player of playersWithStatCount.slice(0, 50)) {
           if (results.apiCallsUsed >= maxApiCalls) break;
+          
+          // Skip players who already have 30+ games (likely complete season)
+          if (player.stat_count >= 30) continue;
 
-          const { count } = await supabase
-            .from('nba_player_stats')
-            .select('id', { count: 'exact', head: true })
-            .eq('event_id', game.event_id);
-
-          // Skip if game already has 16+ player stats
-          if (count && count >= 16) continue;
-
-          console.log(`Syncing boxscore for game ${game.event_id} (currently ${count || 0} stats)`);
+          console.log(`Syncing gamelog for ${player.full_name} (currently ${player.stat_count} stats)`);
 
           try {
-            const response = await fetch(`${BASE_URL}/nba-boxscore?gameid=${game.event_id}`, {
+            const response = await fetch(`${BASE_URL}/nba-player-gamelog?playerid=${player.api_player_id}`, {
               method: 'GET',
               headers: {
                 'x-rapidapi-host': RAPIDAPI_HOST,
@@ -233,97 +251,79 @@ serve(async (req) => {
             results.apiCallsUsed++;
 
             if (response.ok) {
-              const boxscoreData = await response.json();
-              const boxscore = boxscoreData?.response;
+              const gamelogData = await response.json();
+              const gamelog = gamelogData?.response?.gamelog;
 
-              if (boxscore?.teams) {
-                const playerStats: PlayerStats[] = [];
+              if (gamelog?.events && gamelog?.seasonTypes) {
+                const events = gamelog.events;
+                const regularSeason = gamelog.seasonTypes?.find(
+                  (s: { displayName: string }) => s.displayName?.includes('Regular Season')
+                );
 
-                // Load all players for name matching
-                const { data: allPlayers } = await supabase
-                  .from('nba_players')
-                  .select('id, full_name, api_player_id');
+                if (regularSeason?.categories) {
+                  const allStats: PlayerStats[] = [];
 
-                const playerMap = new Map<string, { id: string; api_player_id: string | null }>();
-                const apiIdMap = new Map<string, string>();
-                
-                if (allPlayers) {
-                  for (const p of allPlayers) {
-                    playerMap.set(normalizeName(p.full_name), { id: p.id, api_player_id: p.api_player_id });
-                    if (p.api_player_id) {
-                      apiIdMap.set(p.api_player_id, p.id);
-                    }
-                  }
-                }
+                  for (const category of regularSeason.categories) {
+                    if (category.type === 'event' && category.events) {
+                      for (const gameEvent of category.events) {
+                        const eventId = gameEvent.eventId;
+                        const eventData = events[eventId];
 
-                for (const team of boxscore.teams) {
-                  for (const player of team.players || []) {
-                    if (player.stats && player.stats.length > 0) {
-                      const playerName = player.displayName || player.fullName || 'Unknown';
-                      
-                      // Try to find player by api_player_id first, then by name
-                      let dbPlayerId: string | null = null;
-                      
-                      if (player.id && apiIdMap.has(player.id)) {
-                        dbPlayerId = apiIdMap.get(player.id) || null;
-                      } else {
-                        // Try name matching
-                        const normalized = normalizeName(playerName);
-                        const match = playerMap.get(normalized);
-                        if (match) {
-                          dbPlayerId = match.id;
-                          // Update api_player_id if missing
-                          if (!match.api_player_id && player.id) {
-                            await supabase
-                              .from('nba_players')
-                              .update({ api_player_id: player.id })
-                              .eq('id', match.id);
-                            results.playersLinked++;
-                          }
+                        if (eventData && gameEvent.stats) {
+                          // Ensure fixture exists
+                          const isHome = eventData.homeTeamId === eventData.team?.id;
+                          
+                          await supabase.from('nba_fixtures').upsert({
+                            event_id: eventId,
+                            game_date: eventData.gameDate,
+                            home_team_id: eventData.homeTeamId || '',
+                            home_team_name: isHome ? eventData.team?.displayName || '' : eventData.opponent?.displayName || '',
+                            home_team_abbrev: isHome ? eventData.team?.abbreviation || '' : eventData.opponent?.abbreviation || '',
+                            home_team_logo: isHome ? eventData.team?.logo : eventData.opponent?.logo,
+                            home_team_score: parseInt(eventData.homeTeamScore || '0', 10),
+                            away_team_id: eventData.awayTeamId || '',
+                            away_team_name: !isHome ? eventData.team?.displayName || '' : eventData.opponent?.displayName || '',
+                            away_team_abbrev: !isHome ? eventData.team?.abbreviation || '' : eventData.opponent?.abbreviation || '',
+                            away_team_logo: !isHome ? eventData.team?.logo : eventData.opponent?.logo,
+                            away_team_score: parseInt(eventData.awayTeamScore || '0', 10),
+                            status: 'post',
+                            status_detail: eventData.score || 'Final',
+                            season: '2025-26',
+                          }, { onConflict: 'event_id' });
+
+                          const stats = parseGameStats(
+                            eventId,
+                            eventData.gameDate,
+                            gameEvent.stats,
+                            player.full_name,
+                            player.id
+                          );
+                          allStats.push(stats);
                         }
                       }
-
-                      const stats = parseGameStats(
-                        game.event_id,
-                        boxscore.gameDate || game.game_date,
-                        player.stats,
-                        playerName,
-                        dbPlayerId
-                      );
-                      playerStats.push(stats);
                     }
                   }
+
+                  // Delete old stats for this player and insert new
+                  if (allStats.length > 0) {
+                    await supabase
+                      .from('nba_player_stats')
+                      .delete()
+                      .eq('player_id', player.id);
+
+                    await supabase
+                      .from('nba_player_stats')
+                      .insert(allStats);
+
+                    results.playerStatsAdded += allStats.length;
+                    results.boxscoresSynced++; // Reusing this counter for players synced
+                    console.log(`Added ${allStats.length} stats for ${player.full_name}`);
+                  }
                 }
-
-                // Delete old stats and insert new
-                if (playerStats.length > 0) {
-                  await supabase
-                    .from('nba_player_stats')
-                    .delete()
-                    .eq('event_id', game.event_id);
-
-                  await supabase
-                    .from('nba_player_stats')
-                    .insert(playerStats);
-
-                  results.boxscoresSynced++;
-                  results.playerStatsAdded += playerStats.length;
-                  console.log(`Added ${playerStats.length} stats for game ${game.event_id}`);
-                }
-
-                // Update fixture scores
-                await supabase
-                  .from('nba_fixtures')
-                  .update({
-                    home_team_score: boxscore.homeTeamScore,
-                    away_team_score: boxscore.awayTeamScore,
-                    status_detail: boxscore.status?.detail || 'Final',
-                  })
-                  .eq('event_id', game.event_id);
               }
             }
           } catch (err) {
-            results.errors.push(`Boxscore sync failed for ${game.event_id}`);
+            results.errors.push(`Gamelog sync failed for ${player.full_name}`);
           }
 
           await delay(150);
@@ -373,7 +373,7 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         ...results,
-        message: `Used ${results.apiCallsUsed}/${maxApiCalls} API calls. Synced ${results.scheduleSynced} schedules, ${results.boxscoresSynced} boxscores (${results.playerStatsAdded} player stats), linked ${results.playersLinked} players, fixed ${results.orphanStatsLinked} orphan stats.`,
+        message: `Used ${results.apiCallsUsed}/${maxApiCalls} API calls. Synced ${results.scheduleSynced} schedules, ${results.boxscoresSynced} players (${results.playerStatsAdded} game stats), linked ${results.playersLinked} api_ids, fixed ${results.orphanStatsLinked} orphan stats.`,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
