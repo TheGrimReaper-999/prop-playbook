@@ -312,9 +312,10 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const renameParlay = useCallback(async (parlayId: string, newName: string) => {
     try {
+      // POST workaround (some environments block PUT requests)
       const { error } = await supabase.functions.invoke('parlays', {
-        method: 'PUT',
-        body: { id: parlayId, name: newName },
+        method: 'POST',
+        body: { action: 'update', id: parlayId, name: newName },
       });
 
       if (error) {
@@ -333,9 +334,10 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateParlayPnl = useCallback(async (parlayId: string, pnl: number | null) => {
     try {
+      // POST workaround (some environments block PUT requests)
       const { error } = await supabase.functions.invoke('parlays', {
-        method: 'PUT',
-        body: { id: parlayId, pnl },
+        method: 'POST',
+        body: { action: 'update', id: parlayId, pnl },
       });
 
       if (error) {
