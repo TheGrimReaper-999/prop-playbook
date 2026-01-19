@@ -9,6 +9,7 @@ import { useBetSlip, SavedParlay, ParlayLeg } from '@/contexts/BetSlipContext';
 import { toast } from '@/hooks/use-toast';
 import { useParlayStatus, ParlayStatus, LegStatus } from '@/hooks/useParlayStatus';
 import { useAuth } from '@/hooks/useAuth';
+import Footer from '@/components/Footer';
 const STAT_TYPE_LABELS: Record<string, string> = {
   pts: 'Points',
   reb: 'Rebounds',
@@ -561,6 +562,8 @@ const Parlays = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      <Footer />
     </main>
   );
 };

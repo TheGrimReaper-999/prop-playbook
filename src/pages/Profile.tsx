@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Save, LogOut, User, Camera, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import Footer from '@/components/Footer';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -101,8 +102,8 @@ const Profile = () => {
   }
 
   return (
-    <main className="min-h-screen bg-background">
-      <div className="container max-w-2xl mx-auto px-4 py-8">
+    <main className="min-h-screen bg-background flex flex-col">
+      <div className="container max-w-2xl mx-auto px-4 py-8 flex-1">
         <Button
           variant="ghost"
           onClick={() => navigate(-1)}
@@ -188,6 +189,8 @@ const Profile = () => {
           </CardContent>
         </Card>
       </div>
+      
+      <Footer />
     </main>
   );
 };

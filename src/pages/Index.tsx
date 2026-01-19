@@ -1,10 +1,11 @@
 import HeroSection from '@/components/HeroSection';
 import BetSlipOverlay from '@/components/BetSlipOverlay';
+import Footer from '@/components/Footer';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { Button } from '@/components/ui/button';
 import { LogIn, User, Layers } from 'lucide-react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const Index = () => {
   const { user, loading } = useAuth();
@@ -12,7 +13,7 @@ const Index = () => {
   const navigate = useNavigate();
 
   return (
-    <main className="min-h-screen bg-background pb-40">
+    <main className="min-h-screen bg-background flex flex-col">
       {/* Auth buttons in top right */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
         {!loading && (
@@ -63,17 +64,7 @@ const Index = () => {
       
       <HeroSection />
       
-      {/* Footer */}
-      <footer className="text-center py-8 text-muted-foreground text-sm space-y-2">
-        <div className="flex justify-center gap-4">
-          <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
-          <span>•</span>
-          <Link to="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
-          <span>•</span>
-          <Link to="/contact" className="hover:text-foreground transition-colors">Contact</Link>
-        </div>
-        <p>© {new Date().getFullYear()} BreakingBets LLC. All rights reserved.</p>
-      </footer>
+      <Footer />
     </main>
   );
 };

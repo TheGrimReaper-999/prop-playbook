@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import Footer from '@/components/Footer';
 
 const authSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -101,7 +102,7 @@ const Auth = () => {
   // Show verification success message
   if (showVerificationMessage) {
     return (
-      <main className="min-h-screen bg-background">
+      <main className="min-h-screen bg-background flex flex-col">
         <div className="bg-gradient-to-b from-primary/20 to-background p-6">
           <div className="max-w-md mx-auto">
             <Button
@@ -115,7 +116,7 @@ const Auth = () => {
           </div>
         </div>
 
-        <div className="max-w-md mx-auto p-6">
+        <div className="max-w-md mx-auto p-6 flex-1">
           <Card className="bg-card/50 border-border/50">
             <CardHeader className="text-center">
               <div className="mx-auto w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mb-4">
@@ -156,12 +157,14 @@ const Auth = () => {
             </CardContent>
           </Card>
         </div>
+        
+        <Footer />
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <div className="bg-gradient-to-b from-primary/20 to-background p-6">
         <div className="max-w-md mx-auto">
@@ -177,7 +180,7 @@ const Auth = () => {
       </div>
 
       {/* Auth Form */}
-      <div className="max-w-md mx-auto p-6">
+      <div className="max-w-md mx-auto p-6 flex-1">
         <Card className="bg-card/50 border-border/50">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-black">Welcome</CardTitle>
@@ -303,6 +306,8 @@ const Auth = () => {
           </CardContent>
         </Card>
       </div>
+      
+      <Footer />
     </main>
   );
 };
