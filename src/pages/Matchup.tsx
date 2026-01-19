@@ -8,6 +8,7 @@ import { ArrowLeft, TrendingUp, Users, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import Footer from '@/components/Footer';
+import { ScheduleGame } from '@/hooks/useNbaApi';
 
 interface PlayerStat {
   player_name: string;
@@ -36,6 +37,73 @@ interface GameDetails {
   venue_city: string | null;
 }
 
+// Fetch live game data from API (same source as home page)
+const useLiveGameData = (eventId: string) => {
+  return useQuery({
+    queryKey: ['live-game', eventId],
+    queryFn: async (): Promise<ScheduleGame | null> => {
+      // We need to find the game in the schedule - fetch today and recent days
+      const now = new Date();
+      const dates = [];
+      for (let i = -3; i <= 1; i++) {
+        const d = new Date(now);
+        d.setDate(d.getDate() + i);
+        dates.push(`${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`);
+      }
+      
+      // Fetch schedules in parallel
+      const results = await Promise.all(
+        dates.map(date => 
+          supabase.functions.invoke('nba-stats', {
+            body: { action: 'schedule', gameDate: date }
+          })
+        )
+      );
+      
+      // Find the game in any of the responses
+      for (const result of results) {
+        if (result.error) continue;
+        const events = result.data?.response?.Events || [];
+        const event = events.find((e: any) => e.id === eventId);
+        if (event) {
+          const homeTeamData = event.competitors?.find((c: any) => c.isHome === true) || {};
+          const awayTeamData = event.competitors?.find((c: any) => c.isHome === false) || {};
+          
+          return {
+            id: event.id,
+            date: event.date,
+            status: event.status?.state || 'pre',
+            statusDetail: event.status?.detail || '',
+            completed: event.completed || false,
+            venue: event.venue?.fullName,
+            homeTeam: {
+              id: homeTeamData.id,
+              name: homeTeamData.displayName || homeTeamData.name,
+              abbreviation: homeTeamData.abbrev,
+              logo: homeTeamData.logo,
+              score: homeTeamData.score,
+              winner: homeTeamData.winner,
+            },
+            awayTeam: {
+              id: awayTeamData.id,
+              name: awayTeamData.displayName || awayTeamData.name,
+              abbreviation: awayTeamData.abbrev,
+              logo: awayTeamData.logo,
+              score: awayTeamData.score,
+              winner: awayTeamData.winner,
+            },
+          } as ScheduleGame;
+        }
+      }
+      return null;
+    },
+    enabled: !!eventId,
+    staleTime: 30 * 1000, // Same as home page - 30 seconds
+    refetchInterval: 60 * 1000, // Auto-refresh every 60 seconds for live scores
+  });
+};
+
+// Fallback to DB for fixture metadata (venue city/state)
 const useGameDetails = (eventId: string) => {
   return useQuery({
     queryKey: ['game-details', eventId],
@@ -50,6 +118,7 @@ const useGameDetails = (eventId: string) => {
       return data;
     },
     enabled: !!eventId,
+    staleTime: 5 * 60 * 1000, // DB data can be stale longer since we use API for live scores
   });
 };
 
@@ -137,13 +206,21 @@ const Matchup = () => {
   const navigate = useNavigate();
   const [hasSynced, setHasSynced] = useState(false);
   
-  const { data: game, isLoading: gameLoading, refetch: refetchGame } = useGameDetails(eventId || '');
+  // Live API data for scores/status (same source as home page)
+  const { data: liveGame, isLoading: liveLoading } = useLiveGameData(eventId || '');
+  // DB data for additional metadata (venue city/state) and fallback
+  const { data: dbGame, isLoading: dbLoading, refetch: refetchGame } = useGameDetails(eventId || '');
   const { data: playerStats, isLoading: statsLoading, refetch: refetchStats } = useGamePlayerStats(eventId || '');
   const syncMutation = useSyncGameStats();
 
+  // Use live data for scores/status, fall back to DB for everything else
+  const gameStatus = liveGame?.status || dbGame?.status || 'pre';
+  const statusDetail = liveGame?.statusDetail || dbGame?.status_detail || '';
+
   // Auto-sync if game is completed but no stats available
   useEffect(() => {
-    if (game && !hasSynced && (game.status === 'post' || game.status_detail?.includes('Final')) && (!playerStats || playerStats.length === 0) && !statsLoading) {
+    const isCompleted = gameStatus === 'post' || statusDetail.includes('Final');
+    if ((liveGame || dbGame) && !hasSynced && isCompleted && (!playerStats || playerStats.length === 0) && !statsLoading) {
       setHasSynced(true);
       syncMutation.mutate(eventId || '', {
         onSuccess: () => {
@@ -154,7 +231,7 @@ const Matchup = () => {
         }
       });
     }
-  }, [game, playerStats, statsLoading, hasSynced, eventId, syncMutation]);
+  }, [liveGame, dbGame, playerStats, statsLoading, hasSynced, eventId, syncMutation, gameStatus, statusDetail]);
 
   const handleManualSync = () => {
     if (eventId) {
@@ -171,7 +248,9 @@ const Matchup = () => {
     }
   };
 
-  if (gameLoading) {
+  const isLoading = liveLoading && dbLoading;
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background p-4">
         <div className="max-w-4xl mx-auto">
@@ -193,6 +272,9 @@ const Matchup = () => {
     });
   };
 
+  // Determine what data to show - prefer live, fall back to DB
+  const hasData = liveGame || dbGame;
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="max-w-4xl mx-auto p-4 flex-1">
@@ -206,59 +288,81 @@ const Matchup = () => {
           Back to Games
         </Button>
 
-        {game ? (
+        {hasData ? (
           <>
             {/* Game Header */}
             <Card className="bg-card/50 border-border/30 mb-6">
               <CardContent className="p-6">
                 <div className="text-center mb-4">
-                  <p className="text-sm text-muted-foreground">{formatGameDate(game.game_date)}</p>
-                  {game.venue_name && (
-                    <p className="text-xs text-muted-foreground">{game.venue_name}, {game.venue_city}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {formatGameDate(liveGame?.date || dbGame?.game_date || '')}
+                  </p>
+                  {(liveGame?.venue || dbGame?.venue_name) && (
+                    <p className="text-xs text-muted-foreground">
+                      {liveGame?.venue || `${dbGame?.venue_name}, ${dbGame?.venue_city}`}
+                    </p>
                   )}
                   <span className={`inline-block mt-2 px-3 py-1 rounded-full text-sm ${
-                    game.status === 'in' 
+                    gameStatus === 'in' 
                       ? 'bg-green-500/20 text-green-400' 
-                      : game.status === 'post' 
+                      : gameStatus === 'post' 
                         ? 'bg-muted text-muted-foreground'
                         : 'bg-primary/20 text-primary'
                   }`}>
-                    {game.status_detail || game.status}
+                    {statusDetail || gameStatus}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-center gap-8">
-                  {/* Away Team */}
+                  {/* Away Team - use live data for scores */}
                   <div className="text-center flex-1">
-                    {game.away_team_logo && (
+                    {(liveGame?.awayTeam?.logo || dbGame?.away_team_logo) && (
                       <img 
-                        src={game.away_team_logo} 
-                        alt={game.away_team_name || ''}
+                        src={liveGame?.awayTeam?.logo || dbGame?.away_team_logo || ''} 
+                        alt={liveGame?.awayTeam?.name || dbGame?.away_team_name || ''}
                         className="w-20 h-20 mx-auto mb-2 object-contain"
                       />
                     )}
-                    <p className="font-bold text-lg">{game.away_team_name || game.away_team_abbrev}</p>
-                    {game.away_team_name && <p className="text-sm text-muted-foreground">{game.away_team_abbrev}</p>}
-                    {game.away_team_score !== null && (
-                      <p className="text-3xl font-black mt-2">{game.away_team_score}</p>
+                    <p className="font-bold text-lg">
+                      {liveGame?.awayTeam?.name || dbGame?.away_team_name || liveGame?.awayTeam?.abbreviation || dbGame?.away_team_abbrev}
+                    </p>
+                    {(liveGame?.awayTeam?.name || dbGame?.away_team_name) && (
+                      <p className="text-sm text-muted-foreground">
+                        {liveGame?.awayTeam?.abbreviation || dbGame?.away_team_abbrev}
+                      </p>
+                    )}
+                    {/* Prefer live score, fall back to DB */}
+                    {(liveGame?.awayTeam?.score !== undefined || dbGame?.away_team_score !== null) && gameStatus !== 'pre' && (
+                      <p className={`text-3xl font-black mt-2 ${liveGame?.awayTeam?.winner ? 'text-primary' : ''}`}>
+                        {liveGame?.awayTeam?.score ?? dbGame?.away_team_score}
+                      </p>
                     )}
                   </div>
 
                   <div className="text-2xl font-bold text-muted-foreground">VS</div>
 
-                  {/* Home Team */}
+                  {/* Home Team - use live data for scores */}
                   <div className="text-center flex-1">
-                    {game.home_team_logo && (
+                    {(liveGame?.homeTeam?.logo || dbGame?.home_team_logo) && (
                       <img 
-                        src={game.home_team_logo} 
-                        alt={game.home_team_name || ''}
+                        src={liveGame?.homeTeam?.logo || dbGame?.home_team_logo || ''} 
+                        alt={liveGame?.homeTeam?.name || dbGame?.home_team_name || ''}
                         className="w-20 h-20 mx-auto mb-2 object-contain"
                       />
                     )}
-                    <p className="font-bold text-lg">{game.home_team_name || game.home_team_abbrev}</p>
-                    {game.home_team_name && <p className="text-sm text-muted-foreground">{game.home_team_abbrev}</p>}
-                    {game.home_team_score !== null && (
-                      <p className="text-3xl font-black mt-2">{game.home_team_score}</p>
+                    <p className="font-bold text-lg">
+                      {liveGame?.homeTeam?.name || dbGame?.home_team_name || liveGame?.homeTeam?.abbreviation || dbGame?.home_team_abbrev}
+                    </p>
+                    {(liveGame?.homeTeam?.name || dbGame?.home_team_name) && (
+                      <p className="text-sm text-muted-foreground">
+                        {liveGame?.homeTeam?.abbreviation || dbGame?.home_team_abbrev}
+                      </p>
+                    )}
+                    {/* Prefer live score, fall back to DB */}
+                    {(liveGame?.homeTeam?.score !== undefined || dbGame?.home_team_score !== null) && gameStatus !== 'pre' && (
+                      <p className={`text-3xl font-black mt-2 ${liveGame?.homeTeam?.winner ? 'text-primary' : ''}`}>
+                        {liveGame?.homeTeam?.score ?? dbGame?.home_team_score}
+                      </p>
                     )}
                   </div>
                 </div>
