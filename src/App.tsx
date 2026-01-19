@@ -13,6 +13,7 @@ import Parlays from "./pages/Parlays";
 import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
 import ImportData from "./pages/ImportData";
+import Matchup from "./pages/Matchup";
 import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/decisions" element={<Decisions />} />
             <Route path="/parlays" element={<Parlays />} />
             <Route path="/import" element={<ImportData />} />
+            <Route path="/matchup/:eventId" element={<Matchup />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
