@@ -44,8 +44,8 @@ const TeamProfile = () => {
     const playerName = player.fullName || player.playerName || `${player.firstName} ${player.lastName}`;
     const playerImage = player.image || player.headShotUrl;
 
-    if (isPlayerInSlip(playerId)) {
-      removePlayer(playerId);
+    if (isPlayerInSlip(playerId, playerName)) {
+      removePlayer(playerId, playerName);
     } else {
       addPlayer({
         id: playerId,
