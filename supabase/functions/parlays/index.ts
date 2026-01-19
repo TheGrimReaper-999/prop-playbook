@@ -104,6 +104,43 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Action: update (workaround for PUT transport issues in some environments)
+      if (action === 'update') {
+        const parlayId = body.id as string | undefined;
+        const { name, legs, pnl } = body;
+
+        if (!parlayId) {
+          return new Response(JSON.stringify({ error: 'Parlay ID is required' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          });
+        }
+
+        const updateData: Record<string, unknown> = {};
+        if (name !== undefined) updateData.name = name;
+        if (legs !== undefined) updateData.legs = legs;
+        if (pnl !== undefined) updateData.pnl = pnl;
+
+        console.log(`[parlays] Updating parlay ${parlayId} for user: ${userId} (via POST action)`);
+
+        const { data, error } = await supabase
+          .from('parlays')
+          .update(updateData)
+          .eq('id', parlayId)
+          .eq('user_id', userId)
+          .select()
+          .single();
+
+        if (error) {
+          console.error(`[parlays] Error updating parlay:`, error);
+          throw error;
+        }
+
+        return new Response(JSON.stringify(data), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // Default: create
       const { name, legs } = body;
 
