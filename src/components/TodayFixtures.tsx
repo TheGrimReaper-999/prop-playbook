@@ -9,18 +9,14 @@ import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-reac
 import { format, addDays, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 
-// Get today's date string in Eastern Time (NBA uses ET for scheduling)
+// Get today's date string using local system date
 // Returns YYYYMMDD format
-const getTodayETString = (): string => {
+const getTodayString = (): string => {
   const now = new Date();
-  const etFormatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/New_York',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
-  // en-CA gives YYYY-MM-DD format, remove dashes for API
-  return etFormatter.format(now).replace(/-/g, '');
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
 };
 
 // Parse YYYYMMDD string to Date object (for display purposes only)
@@ -55,13 +51,13 @@ const formatGameTime = (dateString: string): string => {
 };
 
 const TodayFixtures = () => {
-  const todayETString = getTodayETString();
-  const [selectedDateStr, setSelectedDateStr] = useState<string>(todayETString);
+  const todayString = getTodayString();
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(todayString);
   const [calendarOpen, setCalendarOpen] = useState(false);
   
   const { data: games, isLoading, error } = useSchedule(selectedDateStr);
 
-  const isToday = selectedDateStr === todayETString;
+  const isToday = selectedDateStr === todayString;
   
   // For calendar display, parse the string to Date
   const selectedDate = parseApiDate(selectedDateStr);
@@ -74,7 +70,7 @@ const TodayFixtures = () => {
     const next = addDays(selectedDate, 1);
     setSelectedDateStr(formatDateForApi(next));
   };
-  const goToToday = () => setSelectedDateStr(todayETString);
+  const goToToday = () => setSelectedDateStr(todayString);
 
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
