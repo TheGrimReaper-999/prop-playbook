@@ -94,7 +94,7 @@ const PlayerCard = ({ player, rank }: { player: PlayerStat; rank: number }) => {
   
   const handleClick = () => {
     if (player.player_id) {
-      navigate(`/player/api/${player.player_id}`);
+      navigate(`/player/${player.player_id}`);
     }
   };
 

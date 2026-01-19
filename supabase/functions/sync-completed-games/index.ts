@@ -202,15 +202,22 @@ serve(async (req) => {
 
           // For completed games, sync player stats
           if (event.status?.state === 'post') {
-            // Check if we already have player stats for this game
-            const { data: existingStats, count } = await supabase
+            // Check if we already have enough player stats for this game (at least 10 per team = 20 total)
+            const { count } = await supabase
               .from('nba_player_stats')
               .select('id', { count: 'exact', head: true })
               .eq('event_id', event.id);
 
-            if (count && count > 0) {
+            // Skip only if we have 16+ player stats (indicating complete data)
+            if (count && count >= 16) {
               console.log(`Game ${event.id} already has ${count} player stats, skipping`);
               continue;
+            }
+
+            // If partial data exists, delete it first
+            if (count && count > 0) {
+              console.log(`Game ${event.id} has only ${count} player stats, re-syncing...`);
+              await supabase.from('nba_player_stats').delete().eq('event_id', event.id);
             }
 
             console.log(`Syncing player stats for completed game ${event.id}`);
