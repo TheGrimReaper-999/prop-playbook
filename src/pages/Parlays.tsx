@@ -448,7 +448,35 @@ const Parlays = () => {
           </Card>
         ) : (
           <div className="space-y-6">
-            {/* Clear all button */}
+            {/* Total PnL */}
+            <Card className={`border-2 ${totalPnl > 0 ? 'border-green-500/50 bg-green-500/10' : totalPnl < 0 ? 'border-red-500/50 bg-red-500/10' : 'border-border/50 bg-card/50'}`}>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                      totalPnl > 0 ? 'bg-green-500/20' : totalPnl < 0 ? 'bg-red-500/20' : 'bg-muted'
+                    }`}>
+                      <DollarSign className={`w-6 h-6 ${
+                        totalPnl > 0 ? 'text-green-500' : totalPnl < 0 ? 'text-red-500' : 'text-muted-foreground'
+                      }`} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg">Total P&L</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {parlaysWithPnl.length} of {parlays.length} parlays tracked
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`text-3xl font-black ${
+                    totalPnl > 0 ? 'text-green-500' : totalPnl < 0 ? 'text-red-500' : 'text-foreground'
+                  }`}>
+                    {totalPnl > 0 ? '+' : ''}{totalPnl.toFixed(2)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Actions */}
             <div className="flex justify-end">
               <Button
                 variant="outline"
@@ -488,35 +516,7 @@ const Parlays = () => {
               })}
             </div>
 
-            {/* PnL Summary */}
-            {parlaysWithPnl.length > 0 && (
-              <Card className={`border-2 ${totalPnl > 0 ? 'border-green-500/50 bg-green-500/10' : totalPnl < 0 ? 'border-red-500/50 bg-red-500/10' : 'border-border/50 bg-card/50'}`}>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                        totalPnl > 0 ? 'bg-green-500/20' : totalPnl < 0 ? 'bg-red-500/20' : 'bg-muted'
-                      }`}>
-                        <DollarSign className={`w-6 h-6 ${
-                          totalPnl > 0 ? 'text-green-500' : totalPnl < 0 ? 'text-red-500' : 'text-muted-foreground'
-                        }`} />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-lg">Total P&L</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {parlaysWithPnl.length} of {parlays.length} parlays tracked
-                        </p>
-                      </div>
-                    </div>
-                    <span className={`text-3xl font-black ${
-                      totalPnl > 0 ? 'text-green-500' : totalPnl < 0 ? 'text-red-500' : 'text-foreground'
-                    }`}>
-                      {totalPnl > 0 ? '+' : ''}{totalPnl.toFixed(2)}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {/* PnL Summary moved to top */}
 
             {/* Action Button */}
             <Card className="bg-primary/10 border-primary/30">

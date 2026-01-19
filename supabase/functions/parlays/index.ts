@@ -70,9 +70,41 @@ Deno.serve(async (req) => {
       });
     }
 
-    // POST - Create a new parlay
+    // POST - Create a new parlay (or perform action-based operations)
     if (method === 'POST') {
       const body = await req.json();
+      const { action } = body;
+
+      // Action: delete (workaround for DELETE transport issues in some environments)
+      if (action === 'delete') {
+        const parlayId = body.id as string | undefined;
+
+        if (!parlayId) {
+          return new Response(JSON.stringify({ error: 'Parlay ID is required' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          });
+        }
+
+        console.log(`[parlays] Deleting parlay ${parlayId} for user: ${userId} (via POST action)`);
+
+        const { error } = await supabase
+          .from('parlays')
+          .delete()
+          .eq('id', parlayId)
+          .eq('user_id', userId);
+
+        if (error) {
+          console.error(`[parlays] Error deleting parlay:`, error);
+          throw error;
+        }
+
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Default: create
       const { name, legs } = body;
 
       console.log(`[parlays] Creating parlay "${name}" with ${legs?.length || 0} legs for user: ${userId}`);
