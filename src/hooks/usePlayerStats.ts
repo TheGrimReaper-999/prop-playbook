@@ -255,50 +255,118 @@ export const syncAndFetchPlayerStats = async (
 const STALE_THRESHOLD_HOURS = 36;
 const MIN_GAMES_THRESHOLD = 5;
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const isUuid = (value: string) => UUID_REGEX.test(value);
+
+/**
+ * Some parts of the UI (notably TeamProfile roster) use API player IDs.
+ * Decisions/bets rely on DB player UUIDs.
+ * This resolver normalizes any incoming identifier to a DB UUID, creating/linking via smart-sync when possible.
+ */
+const resolveDbPlayerId = async (params: {
+  playerId: string;
+  playerName?: string;
+  teamName?: string;
+}): Promise<string | null> => {
+  const { playerId, playerName, teamName } = params;
+
+  if (isUuid(playerId)) return playerId;
+
+  // 1) Direct lookup by cached api_player_id
+  const { data: byApi } = await supabase
+    .from('nba_players')
+    .select('id')
+    .eq('api_player_id', playerId)
+    .maybeSingle();
+  if (byApi?.id) return byApi.id;
+
+  // 2) Best-effort lookup by name + team (case-insensitive)
+  if (playerName) {
+    let q = supabase.from('nba_players').select('id').ilike('full_name', playerName);
+    if (teamName) q = q.eq('team_name', teamName);
+    const { data: byName } = await q.maybeSingle();
+    if (byName?.id) return byName.id;
+  }
+
+  // 3) Ask backend to sync/link using API player id; then re-check
+  try {
+    await supabase.functions.invoke('smart-sync', {
+      body: {
+        action: 'sync-player',
+        apiPlayerId: playerId,
+        playerName: playerName || null,
+        teamName: teamName || null,
+      },
+    });
+  } catch {
+    // ignore; we'll re-check below
+  }
+
+  const { data: afterSync } = await supabase
+    .from('nba_players')
+    .select('id')
+    .eq('api_player_id', playerId)
+    .maybeSingle();
+
+  return afterSync?.id || null;
+};
+
 export const shouldSyncPlayerStats = (games: GameLogEntry[]): boolean => {
   // Need sync if no games or very few games
   if (games.length < MIN_GAMES_THRESHOLD) {
     return true;
   }
-  
+
   // Check if most recent game is stale
   if (games.length > 0) {
     const mostRecentDate = new Date(games[0].gameDate);
     const now = new Date();
     const hoursSinceLastGame = (now.getTime() - mostRecentDate.getTime()) / (1000 * 60 * 60);
-    
+
     // If most recent game is more than threshold hours old, might need sync
     // But only during active season (rough check: October-June)
     const month = now.getMonth();
     const isSeasonActive = month >= 9 || month <= 5; // Oct-June
-    
+
     if (isSeasonActive && hoursSinceLastGame > STALE_THRESHOLD_HOURS) {
       return true;
     }
   }
-  
+
   return false;
 };
 
 // Ensure player stats exist - main entry point for getting verified stats
+// NOTE: Accepts either a DB UUID or an API player id; will normalize internally.
 export const ensurePlayerStats = async (
-  dbPlayerId: string,
+  playerId: string,
   playerName: string,
   teamName?: string
 ): Promise<GameLogEntry[]> => {
+  const dbPlayerId = await resolveDbPlayerId({ playerId, playerName, teamName });
+
+  if (!dbPlayerId) {
+    console.warn(
+      `[ensurePlayerStats] Could not resolve DB player id for ${playerName} (incoming id: ${playerId})`
+    );
+    return [];
+  }
+
   console.log(`[ensurePlayerStats] Fetching stats for ${playerName}...`);
-  
+
   // First try to fetch from database
   let stats = await fetchPlayerStatsFromDb(dbPlayerId, teamName);
   console.log(`[ensurePlayerStats] Found ${stats.length} games in DB for ${playerName}`);
-  
+
   // Check if we need to sync
   if (shouldSyncPlayerStats(stats)) {
     console.log(`[ensurePlayerStats] Stats incomplete/stale for ${playerName}, syncing...`);
     stats = await syncAndFetchPlayerStats(dbPlayerId, playerName, teamName);
     console.log(`[ensurePlayerStats] After sync: ${stats.length} games for ${playerName}`);
   }
-  
+
   return stats;
 };
 
