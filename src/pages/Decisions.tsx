@@ -713,21 +713,17 @@ const Decisions = () => {
             {/* Advanced Model Toggle + Selection Actions */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               {/* Advanced Error Correction Toggle */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-card/50 border border-border/50">
-                <Zap className="w-4 h-4 text-amber-500" />
-                <Label htmlFor="advanced-mode" className="text-sm font-medium cursor-pointer">
-                  Advanced Error Correction
+              <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-card/50 border border-border/50">
+                <Zap className={`w-3.5 h-3.5 ${useAdvancedModel ? 'text-amber-500' : 'text-muted-foreground'}`} />
+                <Label htmlFor="advanced-mode" className="text-xs font-medium cursor-pointer whitespace-nowrap">
+                  Error Correction
                 </Label>
                 <Switch
                   id="advanced-mode"
                   checked={useAdvancedModel}
                   onCheckedChange={setUseAdvancedModel}
+                  className="scale-90"
                 />
-                {useAdvancedModel && (
-                  <span className="text-xs bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded-full">
-                    Active
-                  </span>
-                )}
               </div>
 
               {/* Selection Actions */}
