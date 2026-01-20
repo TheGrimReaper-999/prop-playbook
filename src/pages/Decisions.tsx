@@ -464,20 +464,18 @@ const Decisions = () => {
         errorTracker,
       });
 
-      // Calculate predicted mean and sigma for storing predictions
+      // Always calculate base predicted mean and sigma for storing predictions
+      // This ensures the feedback loop collects data regardless of toggle state
       let predictedMean: number | undefined;
       let predictedSigma: number | undefined;
       if (last10Stats && last10Stats.length > 0) {
         const muMA = calculateMovingAverage(last10Stats);
         const muEMA = calculateEma(last10Stats);
+        // Store the BASE prediction (no bias correction) so the feedback loop
+        // can accurately measure how far off our base model is
         predictedMean = 0.6 * muEMA + 0.4 * muMA;
         
-        // Apply bias correction if error tracker exists AND advanced mode is on
-        if (useAdvancedModel && errorTracker) {
-          predictedMean = predictedMean + 0.5 * errorTracker.errorEma;
-        }
-        
-        // Calculate sigma
+        // Calculate sigma (standard deviation)
         const variance = last10Stats.reduce((sum, x) => sum + Math.pow(x - muMA, 2), 0) / (last10Stats.length - 1);
         predictedSigma = Math.sqrt(variance);
       }
