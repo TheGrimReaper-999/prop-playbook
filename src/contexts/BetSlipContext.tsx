@@ -52,6 +52,8 @@ export interface ParlayLeg {
   oddsOver: string;
   oddsUnder: string;
   taken?: boolean;
+  // Target game for this bet - links to nba_fixtures.event_id
+  eventId?: string;
   // Prediction metadata for error tracking
   predictedMean?: number;
   predictedSigma?: number;

@@ -265,6 +265,7 @@ const Decisions = () => {
   const [statsLoadAttempted, setStatsLoadAttempted] = useState(false);
   const [errorTrackers, setErrorTrackers] = useState<Map<string, DbErrorTracker>>(new Map());
   const [useAdvancedModel, setUseAdvancedModel] = useState(false);
+  const [upcomingFixtures, setUpcomingFixtures] = useState<any[]>([]);
 
   // Check if we need to load stats (self-sufficient behavior)
   const missingStats = useMemo(() => {
@@ -307,6 +308,34 @@ const Decisions = () => {
       fetchErrorTrackers();
     }
   }, [legs]);
+
+  // Fetch upcoming fixtures to link parlays to specific games
+  useEffect(() => {
+    const fetchUpcomingFixtures = async () => {
+      const today = new Date().toISOString().split('T')[0];
+      
+      try {
+        const { data, error } = await supabase
+          .from('nba_fixtures')
+          .select('event_id, game_date, home_team_name, away_team_name, status')
+          .gte('game_date', today)
+          .order('game_date', { ascending: true })
+          .limit(100);
+
+        if (error) {
+          console.error('[Decisions] Error fetching fixtures:', error);
+          return;
+        }
+
+        setUpcomingFixtures(data || []);
+        console.log(`[Decisions] Loaded ${data?.length || 0} upcoming fixtures`);
+      } catch (err) {
+        console.error('[Decisions] Error fetching fixtures:', err);
+      }
+    };
+
+    fetchUpcomingFixtures();
+  }, []);
 
   // Auto-fetch stats if missing when page loads
   useEffect(() => {
@@ -492,25 +521,49 @@ const Decisions = () => {
       return;
     }
 
+    // Helper to find the next game for a player's team
+    const findNextGameForTeam = (teamName: string): string | undefined => {
+      const teamLower = teamName.toLowerCase();
+      const fixture = upcomingFixtures.find(f => 
+        f.home_team_name?.toLowerCase().includes(teamLower) ||
+        f.away_team_name?.toLowerCase().includes(teamLower)
+      );
+      return fixture?.event_id;
+    };
+
     const selectedDecisions = decisions.filter((d) => selectedLegs.has(d.leg.legId));
-    const parlayLegs: ParlayLeg[] = selectedDecisions.map((d) => ({
-      legId: d.leg.legId,
-      player: d.leg.player,
-      statType: d.leg.details.statType,
-      mainLine: d.leg.details.mainLine,
-      decision: d.result.decision,
-      oddsFormat: d.leg.details.oddsFormat,
-      oddsOver: d.leg.details.oddsOver,
-      oddsUnder: d.leg.details.oddsUnder,
-      // Include prediction metadata for error tracking
-      predictedMean: d.predictedMean,
-      predictedSigma: d.predictedSigma,
-      pOverModel: d.result.pOverModel,
-      pUnderModel: d.result.pUnderModel,
-      // Confidence and advanced model info
-      confidence: d.result.confidence,
-      usedAdvancedModel: useAdvancedModel,
-    }));
+    const parlayLegs: ParlayLeg[] = selectedDecisions.map((d) => {
+      // Find the next scheduled game for this player's team
+      const eventId = findNextGameForTeam(d.leg.player.team);
+      
+      return {
+        legId: d.leg.legId,
+        player: d.leg.player,
+        statType: d.leg.details.statType,
+        mainLine: d.leg.details.mainLine,
+        decision: d.result.decision,
+        oddsFormat: d.leg.details.oddsFormat,
+        oddsOver: d.leg.details.oddsOver,
+        oddsUnder: d.leg.details.oddsUnder,
+        // Link to specific game
+        eventId,
+        // Include prediction metadata for error tracking
+        predictedMean: d.predictedMean,
+        predictedSigma: d.predictedSigma,
+        pOverModel: d.result.pOverModel,
+        pUnderModel: d.result.pUnderModel,
+        // Confidence and advanced model info
+        confidence: d.result.confidence,
+        usedAdvancedModel: useAdvancedModel,
+      };
+    });
+
+    // Log if any legs couldn't be linked to a game
+    const unlinkedLegs = parlayLegs.filter(l => !l.eventId);
+    if (unlinkedLegs.length > 0) {
+      console.warn(`[Decisions] ${unlinkedLegs.length} leg(s) couldn't be linked to upcoming games:`, 
+        unlinkedLegs.map(l => l.player.name));
+    }
 
     // Store legs and show naming dialog
     setPendingParlayLegs(parlayLegs);
