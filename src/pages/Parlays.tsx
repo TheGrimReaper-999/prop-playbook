@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil, Loader2, DollarSign, LogIn } from 'lucide-react';
+import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil, Loader2, DollarSign, LogIn, Zap, Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -25,10 +25,6 @@ const STAT_TYPE_LABELS: Record<string, string> = {
   'stl+blk': 'Steals + Blocks',
 };
 
-interface LegActualValue {
-  legId: string;
-  actualValue?: number;
-}
 
 const getDecisionIcon = (decision: string) => {
   switch (decision) {
@@ -176,6 +172,13 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle,
                 {parlay.legs.filter(l => l.taken !== false).length} Taken
               </span>
             )}
+            {/* Show if any leg used advanced model */}
+            {parlay.legs.some(l => l.usedAdvancedModel) && (
+              <span className="flex items-center gap-1 bg-amber-500/20 text-amber-500 px-2.5 py-1 rounded-full text-xs sm:text-sm font-semibold">
+                <Zap className="w-3 h-3" />
+                Advanced
+              </span>
+            )}
             {getStatusBadge(status)}
           </div>
         </div>
@@ -230,12 +233,19 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle,
                     </div>
                   </div>
                 </div>
-                {/* Decision + status */}
-                <div className="flex items-center gap-2 pl-7 sm:pl-0">
+                {/* Decision + confidence + status */}
+                <div className="flex items-center gap-2 pl-7 sm:pl-0 flex-wrap">
                   {getDecisionIcon(leg.decision)}
                   <span className={`text-xs sm:text-sm font-semibold whitespace-nowrap ${getDecisionColor(leg.decision)}`}>
                     {leg.decision}
                   </span>
+                  {/* Confidence badge */}
+                  {leg.confidence && (
+                    <span className="flex items-center gap-1 text-xs bg-muted/50 text-muted-foreground px-1.5 py-0.5 rounded">
+                      <Target className="w-3 h-3" />
+                      {leg.confidence.replace('_', ' ')}
+                    </span>
+                  )}
                   {legStatus && getLegStatusIcon(legStatus)}
                 </div>
               </div>

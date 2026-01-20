@@ -1,10 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt, Check, Layers, ChevronDown, ChevronUp, BarChart3, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt, Check, Layers, ChevronDown, ChevronUp, BarChart3, Loader2, AlertCircle, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useBetSlip, BetSlipLeg, ParlayLeg, LegStats } from '@/contexts/BetSlipContext';
 import { evaluateProp, BetDecisionResult, ErrorTracker, calculateMovingAverage, calculateEma } from '@/lib/betting-utils';
@@ -262,6 +264,7 @@ const Decisions = () => {
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [statsLoadAttempted, setStatsLoadAttempted] = useState(false);
   const [errorTrackers, setErrorTrackers] = useState<Map<string, DbErrorTracker>>(new Map());
+  const [useAdvancedModel, setUseAdvancedModel] = useState(false);
 
   // Check if we need to load stats (self-sufficient behavior)
   const missingStats = useMemo(() => {
@@ -376,10 +379,10 @@ const Decisions = () => {
         last10Stats = getStatValuesForType(stats.statValues, leg.details.statType, 10);
       }
 
-      // Get error tracker if available
+      // Get error tracker if available (only use if advanced mode is on)
       const trackerKey = `${leg.player.id}:${leg.details.statType}`;
       const dbTracker = errorTrackers.get(trackerKey);
-      const errorTracker = dbTracker ? toErrorTracker(dbTracker) : undefined;
+      const errorTracker = (useAdvancedModel && dbTracker) ? toErrorTracker(dbTracker) : undefined;
 
       const result = evaluateProp({
         propLine,
@@ -398,8 +401,8 @@ const Decisions = () => {
         const muEMA = calculateEma(last10Stats);
         predictedMean = 0.6 * muEMA + 0.4 * muMA;
         
-        // Apply bias correction if error tracker exists
-        if (errorTracker) {
+        // Apply bias correction if error tracker exists AND advanced mode is on
+        if (useAdvancedModel && errorTracker) {
           predictedMean = predictedMean + 0.5 * errorTracker.errorEma;
         }
         
@@ -417,7 +420,7 @@ const Decisions = () => {
         hasErrorTracker: !!dbTracker,
       };
     });
-  }, [legs, legStats, errorTrackers]);
+  }, [legs, legStats, errorTrackers, useAdvancedModel]);
 
   const summary = useMemo(() => {
     const takeOver = decisions.filter((d) => d.result.decision === 'TAKE OVER').length;
@@ -504,6 +507,9 @@ const Decisions = () => {
       predictedSigma: d.predictedSigma,
       pOverModel: d.result.pOverModel,
       pUnderModel: d.result.pUnderModel,
+      // Confidence and advanced model info
+      confidence: d.result.confidence,
+      usedAdvancedModel: useAdvancedModel,
     }));
 
     // Store legs and show naming dialog
@@ -704,18 +710,39 @@ const Decisions = () => {
               </CardContent>
             </Card>
 
-            {/* Selection Actions */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-muted-foreground mr-2">Quick select:</span>
-              <Button variant="outline" size="sm" onClick={selectAll}>
-                Select All
-              </Button>
-              <Button variant="outline" size="sm" onClick={deselectAll}>
-                Deselect All
-              </Button>
-              <Button variant="outline" size="sm" onClick={selectRecommended}>
-                Select Recommended
-              </Button>
+            {/* Advanced Model Toggle + Selection Actions */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              {/* Advanced Error Correction Toggle */}
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-card/50 border border-border/50">
+                <Zap className="w-4 h-4 text-amber-500" />
+                <Label htmlFor="advanced-mode" className="text-sm font-medium cursor-pointer">
+                  Advanced Error Correction
+                </Label>
+                <Switch
+                  id="advanced-mode"
+                  checked={useAdvancedModel}
+                  onCheckedChange={setUseAdvancedModel}
+                />
+                {useAdvancedModel && (
+                  <span className="text-xs bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded-full">
+                    Active
+                  </span>
+                )}
+              </div>
+
+              {/* Selection Actions */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-muted-foreground mr-2">Quick select:</span>
+                <Button variant="outline" size="sm" onClick={selectAll}>
+                  Select All
+                </Button>
+                <Button variant="outline" size="sm" onClick={deselectAll}>
+                  Deselect All
+                </Button>
+                <Button variant="outline" size="sm" onClick={selectRecommended}>
+                  Select Recommended
+                </Button>
+              </div>
             </div>
 
             {/* Decision Cards */}
