@@ -94,10 +94,11 @@ interface ParlayCardProps {
   status?: ParlayStatus;
   legStatuses?: Map<string, LegStatus>;
   legActualValues?: Map<string, number | undefined>;
+  legOpponents?: Map<string, { abbrev: string; isHome: boolean } | undefined>;
   isDeleting?: boolean;
 }
 
-const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle, status = 'pending', legStatuses, legActualValues, isDeleting }: ParlayCardProps) => {
+const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle, status = 'pending', legStatuses, legActualValues, legOpponents, isDeleting }: ParlayCardProps) => {
   const [pnlInput, setPnlInput] = useState<string>(parlay.pnl?.toString() ?? '');
   const [isUpdatingPnl, setIsUpdatingPnl] = useState(false);
 
@@ -192,6 +193,7 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle,
           {parlay.legs.map((leg, index) => {
             const legStatus = legStatuses?.get(leg.legId);
             const actualValue = legActualValues?.get(leg.legId);
+            const opponent = legOpponents?.get(leg.legId);
             const hasResult = legStatus && legStatus !== 'pending';
             // Treat undefined/null taken as true (taken by default)
             const isTaken = leg.taken !== false;
@@ -217,7 +219,14 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle,
                     #{index + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className={`font-medium text-sm sm:text-base ${!isTaken ? 'line-through' : ''}`}>{leg.player.name}</p>
+                    <p className={`font-medium text-sm sm:text-base ${!isTaken ? 'line-through' : ''}`}>
+                      {leg.player.name}
+                      {opponent && (
+                        <span className="text-muted-foreground font-normal ml-1">
+                          {opponent.isHome ? 'vs' : '@'} {opponent.abbrev}
+                        </span>
+                      )}
+                    </p>
                     <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
                       <span>{STAT_TYPE_LABELS[leg.statType] || leg.statType}</span>
                       <span>•</span>
@@ -552,9 +561,13 @@ const Parlays = () => {
                 const result = parlayStatuses?.get(parlay.id);
                 const legStatusMap = new Map<string, LegStatus>();
                 const legActualValuesMap = new Map<string, number | undefined>();
+                const legOpponentsMap = new Map<string, { abbrev: string; isHome: boolean } | undefined>();
                 result?.legResults.forEach(lr => {
                   legStatusMap.set(lr.legId, lr.status);
                   legActualValuesMap.set(lr.legId, lr.actualValue);
+                  if (lr.opponentAbbrev) {
+                    legOpponentsMap.set(lr.legId, { abbrev: lr.opponentAbbrev, isHome: lr.isHome ?? false });
+                  }
                 });
                 
                 return (
@@ -568,6 +581,7 @@ const Parlays = () => {
                     status={result?.status}
                     legStatuses={legStatusMap}
                     legActualValues={legActualValuesMap}
+                    legOpponents={legOpponentsMap}
                     isDeleting={isDeleting === parlay.id}
                   />
                 );
