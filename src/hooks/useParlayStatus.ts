@@ -12,6 +12,7 @@ interface LegResult {
   actualValue?: number;
   opponentAbbrev?: string;
   isHome?: boolean;
+  gameDate?: string;
 }
 
 interface ParlayResult {
@@ -106,11 +107,11 @@ const fetchParlayStatuses = async (parlays: SavedParlay[]): Promise<Map<string, 
     .gte('game_date', earliestDate)
     .order('game_date', { ascending: true });
 
-  // 5. Get unique event_ids and batch fetch fixture statuses with team info
+  // 5. Get unique event_ids and batch fetch fixture statuses with team info and game date
   const eventIds = [...new Set((allStats || []).map(s => s.event_id))];
   const { data: fixtures } = await supabase
     .from('nba_fixtures')
-    .select('event_id, status, home_team_abbrev, away_team_abbrev, home_team_name, away_team_name')
+    .select('event_id, status, home_team_abbrev, away_team_abbrev, home_team_name, away_team_name, game_date')
     .in('event_id', eventIds);
 
   const fixtureMap = new Map<string, typeof fixtures extends (infer T)[] | null ? T : never>();
@@ -185,7 +186,7 @@ const fetchParlayStatuses = async (parlays: SavedParlay[]): Promise<Map<string, 
         status = actualValue < line ? 'win' : 'loss';
       }
 
-      legResults.push({ legId: leg.legId, status, actualValue, opponentAbbrev, isHome });
+      legResults.push({ legId: leg.legId, status, actualValue, opponentAbbrev, isHome, gameDate: fixture?.game_date });
     }
 
     results.set(parlay.id, {

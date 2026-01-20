@@ -296,6 +296,7 @@ const RecentGames = ({ games, isLoading, lastUpdated }: RecentGamesProps) => {
                 <th className="text-center p-4 font-semibold">PTS</th>
                 <th className="text-center p-4 font-semibold">REB</th>
                 <th className="text-center p-4 font-semibold">AST</th>
+                <th className="text-center p-4 font-semibold">3PM</th>
                 <th className="text-center p-4 font-semibold">Result</th>
                 <th className="w-8"></th>
               </tr>
@@ -322,6 +323,7 @@ const RecentGames = ({ games, isLoading, lastUpdated }: RecentGamesProps) => {
                   <td className="p-4 text-center">{game.pts}</td>
                   <td className="p-4 text-center">{game.reb}</td>
                   <td className="p-4 text-center">{game.ast}</td>
+                  <td className="p-4 text-center">{game.fg3m}</td>
                   <td className="p-4 text-center">
                     <span className={`px-2 py-1 rounded text-xs font-bold ${
                       game.wl === 'W' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'

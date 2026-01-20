@@ -94,7 +94,7 @@ interface ParlayCardProps {
   status?: ParlayStatus;
   legStatuses?: Map<string, LegStatus>;
   legActualValues?: Map<string, number | undefined>;
-  legOpponents?: Map<string, { abbrev: string; isHome: boolean } | undefined>;
+  legOpponents?: Map<string, { abbrev: string; isHome: boolean; gameDate?: string } | undefined>;
   isDeleting?: boolean;
 }
 
@@ -219,14 +219,21 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle,
                     #{index + 1}
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className={`font-medium text-sm sm:text-base ${!isTaken ? 'line-through' : ''}`}>
-                      {leg.player.name}
+                    <div className="flex flex-wrap items-center gap-x-2">
+                      <p className={`font-medium text-sm sm:text-base ${!isTaken ? 'line-through' : ''}`}>
+                        {leg.player.name}
+                      </p>
                       {opponent && (
-                        <span className="text-muted-foreground font-normal ml-1">
+                        <span className="text-muted-foreground text-xs sm:text-sm">
                           {opponent.isHome ? 'vs' : '@'} {opponent.abbrev}
+                          {opponent.gameDate && (
+                            <span className="ml-1 text-xs">
+                              ({new Date(opponent.gameDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })})
+                            </span>
+                          )}
                         </span>
                       )}
-                    </p>
+                    </div>
                     <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
                       <span>{STAT_TYPE_LABELS[leg.statType] || leg.statType}</span>
                       <span>•</span>
@@ -561,12 +568,12 @@ const Parlays = () => {
                 const result = parlayStatuses?.get(parlay.id);
                 const legStatusMap = new Map<string, LegStatus>();
                 const legActualValuesMap = new Map<string, number | undefined>();
-                const legOpponentsMap = new Map<string, { abbrev: string; isHome: boolean } | undefined>();
+                const legOpponentsMap = new Map<string, { abbrev: string; isHome: boolean; gameDate?: string } | undefined>();
                 result?.legResults.forEach(lr => {
                   legStatusMap.set(lr.legId, lr.status);
                   legActualValuesMap.set(lr.legId, lr.actualValue);
                   if (lr.opponentAbbrev) {
-                    legOpponentsMap.set(lr.legId, { abbrev: lr.opponentAbbrev, isHome: lr.isHome ?? false });
+                    legOpponentsMap.set(lr.legId, { abbrev: lr.opponentAbbrev, isHome: lr.isHome ?? false, gameDate: lr.gameDate });
                   }
                 });
                 
