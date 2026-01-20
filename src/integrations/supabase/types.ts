@@ -259,6 +259,122 @@ export type Database = {
         }
         Relationships: []
       }
+      player_error_trackers: {
+        Row: {
+          beta: number | null
+          error_ema: number | null
+          id: string
+          player_id: string | null
+          recent_errors: number[] | null
+          stat_type: string
+          total_predictions: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          beta?: number | null
+          error_ema?: number | null
+          id?: string
+          player_id?: string | null
+          recent_errors?: number[] | null
+          stat_type: string
+          total_predictions?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          beta?: number | null
+          error_ema?: number | null
+          id?: string
+          player_id?: string | null
+          recent_errors?: number[] | null
+          stat_type?: string
+          total_predictions?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "player_error_trackers_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "nba_players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      predictions: {
+        Row: {
+          actual_value: number | null
+          created_at: string | null
+          decision: string
+          event_id: string | null
+          id: string
+          outcome: string | null
+          p_over_model: number | null
+          p_under_model: number | null
+          parlay_id: string | null
+          player_id: string | null
+          player_name: string
+          predicted_mean: number
+          predicted_sigma: number | null
+          processed: boolean | null
+          prop_line: number
+          stat_type: string
+          user_id: string | null
+        }
+        Insert: {
+          actual_value?: number | null
+          created_at?: string | null
+          decision: string
+          event_id?: string | null
+          id?: string
+          outcome?: string | null
+          p_over_model?: number | null
+          p_under_model?: number | null
+          parlay_id?: string | null
+          player_id?: string | null
+          player_name: string
+          predicted_mean: number
+          predicted_sigma?: number | null
+          processed?: boolean | null
+          prop_line: number
+          stat_type: string
+          user_id?: string | null
+        }
+        Update: {
+          actual_value?: number | null
+          created_at?: string | null
+          decision?: string
+          event_id?: string | null
+          id?: string
+          outcome?: string | null
+          p_over_model?: number | null
+          p_under_model?: number | null
+          parlay_id?: string | null
+          player_id?: string | null
+          player_name?: string
+          predicted_mean?: number
+          predicted_sigma?: number | null
+          processed?: boolean | null
+          prop_line?: number
+          stat_type?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "predictions_parlay_id_fkey"
+            columns: ["parlay_id"]
+            isOneToOne: false
+            referencedRelation: "parlays"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "predictions_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "nba_players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
