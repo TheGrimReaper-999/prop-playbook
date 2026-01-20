@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.smart-sync]
 verify_jwt = false
+
+[functions.backfill-predictions]
+verify_jwt = false
