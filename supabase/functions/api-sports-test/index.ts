@@ -120,12 +120,15 @@ serve(async (req) => {
       case 'odds-by-bet':
         // Get odds for a specific bet type (player props)
         // betId: 117=Points, 118=Assists, 119=Rebounds, 120=Triples, etc.
-        const { betId } = await req.json();
+        const { betId, gameId: oddsGameId } = await req.json();
         if (!betId) throw new Error('betId required');
         endpoint = '/odds';
         params.append('league', '12');
         params.append('season', currentSeason);
         params.append('bet', betId.toString());
+        if (oddsGameId) {
+          params.append('game', oddsGameId.toString());
+        }
         break;
 
       default:
