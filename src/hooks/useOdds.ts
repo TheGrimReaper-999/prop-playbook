@@ -15,18 +15,49 @@ interface FetchOddsOptions {
 }
 
 /**
+ * Get UTC date string in YYYY-MM-DD format
+ */
+function getUTCDateString(): string {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(now.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Calculate NBA season string based on current date
+ * NBA season runs from October to June
+ * e.g., games in Jan 2025 are part of "2024-2025" season
+ */
+function getCurrentNBASeason(): string {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth(); // 0-indexed (0 = January)
+  
+  // If we're in Jan-June, we're in the second half of the season
+  // Season started in October of previous year
+  if (month < 6) { // January (0) through June (5)
+    return `${year - 1}-${year}`;
+  } else {
+    // July onwards, new season starts in October
+    return `${year}-${year + 1}`;
+  }
+}
+
+/**
  * Find the game ID for a player's team from today's schedule
  */
 async function findPlayerGame(teamName: string): Promise<number | null> {
   try {
-    const today = new Date();
-    const utcDate = today.toISOString().split('T')[0];
+    const utcDate = getUTCDateString();
+    const season = getCurrentNBASeason();
     
-    console.log(`🔍 Looking for game for team: ${teamName} on ${utcDate}`);
+    console.log(`🔍 Looking for game for team: ${teamName} on ${utcDate} (season: ${season})`);
     
     const games = await apiSports.getGames({
       league: 12,
-      season: '2024-2025',
+      season: season,
       date: utcDate,
     });
     
@@ -81,6 +112,8 @@ export async function fetchOddsDirect({
 
   console.log(`✅ Found bet ID ${betId} for stat type: ${statType}`);
 
+  const season = getCurrentNBASeason();
+
   try {
     // Get game ID if not provided but we have a team name
     let targetGameId = gameId;
@@ -88,12 +121,12 @@ export async function fetchOddsDirect({
       targetGameId = await findPlayerGame(teamName) || undefined;
     }
 
-    console.log(`🎯 Fetching odds with bet ID: ${betId}, game: ${targetGameId || 'all games'}`);
+    console.log(`🎯 Fetching odds with bet ID: ${betId}, game: ${targetGameId || 'all games'}, season: ${season}`);
 
     // Fetch odds from API
     const apiOdds = await apiSports.getOdds({
       league: 12,
-      season: '2024-2025',
+      season: season,
       bookmaker: 4, // Bet365
       bet: betId,
       game: targetGameId,
