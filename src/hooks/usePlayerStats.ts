@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { GameLogEntry } from './useNbaApi';
+import { teamMatchesAbbrev } from '@/lib/team-utils';
 
 export interface PlayerGameStats {
   playerId: string;
@@ -67,9 +68,9 @@ export const dbStatsToGameLogEntry = (
   let score = '';
 
   if (fixture && playerTeam) {
-    // Determine if player's team is home or away
-    const isHome = fixture.home_team_name?.toLowerCase().includes(playerTeam.toLowerCase()) ||
-                   fixture.home_team_abbrev?.toLowerCase() === playerTeam.toLowerCase();
+    // Determine if player's team is home or away using robust matching
+    const isHome = teamMatchesAbbrev(playerTeam, fixture.home_team_abbrev) ||
+                   (fixture.home_team_name && fixture.home_team_name.toLowerCase().includes(playerTeam.toLowerCase()));
     
     if (isHome) {
       opponent = fixture.away_team_abbrev || fixture.away_team_name || '';
