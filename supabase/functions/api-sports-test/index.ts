@@ -24,6 +24,9 @@ serve(async (req) => {
     let endpoint = '';
     const params = new URLSearchParams();
 
+    // Default to current season (2025-2026) if not specified
+    const currentSeason = season || '2025-2026';
+    
     switch (action) {
       case 'test':
         // Simple connectivity/status test
@@ -49,7 +52,7 @@ serve(async (req) => {
         if (!playerId) throw new Error('playerId required');
         endpoint = '/games/statistics/players';
         params.append('player', playerId.toString());
-        params.append('season', season || '2024-2025');
+        params.append('season', currentSeason);
         break;
         
       case 'game':
@@ -64,7 +67,7 @@ serve(async (req) => {
         if (!date) throw new Error('date required');
         endpoint = '/games';
         params.append('league', '12'); // NBA
-        params.append('season', season || '2024-2025');
+        params.append('season', currentSeason);
         params.append('date', date);
         break;
         
@@ -73,7 +76,7 @@ serve(async (req) => {
         if (!teamId) throw new Error('teamId required');
         endpoint = '/games';
         params.append('league', '12');
-        params.append('season', season || '2024-2025');
+        params.append('season', currentSeason);
         params.append('team', teamId.toString());
         break;
         
@@ -97,14 +100,14 @@ serve(async (req) => {
         // Get all NBA teams
         endpoint = '/teams';
         params.append('league', '12');
-        params.append('season', season || '2024-2025');
+        params.append('season', currentSeason);
         break;
         
       case 'standings':
         // Get current NBA standings
         endpoint = '/standings';
         params.append('league', '12');
-        params.append('season', season || '2024-2025');
+        params.append('season', currentSeason);
         break;
 
       default:
