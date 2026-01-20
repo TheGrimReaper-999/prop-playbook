@@ -243,7 +243,21 @@ serve(async (req) => {
       }
 
       const allStats: PlayerStats[] = [];
-      const name = playerName || 'Unknown Player';
+      
+      // Resolve player name from DB first, then fallback to passed name
+      let resolvedName = playerName;
+      if (!resolvedName && dbPlayerId) {
+        const { data: playerData } = await supabase
+          .from('nba_players')
+          .select('full_name')
+          .eq('id', dbPlayerId)
+          .maybeSingle();
+        resolvedName = playerData?.full_name || null;
+      }
+      const name = resolvedName || 'Unknown Player';
+      if (name === 'Unknown Player') {
+        console.warn(`WARNING: Could not resolve player name for dbPlayerId: ${dbPlayerId}`);
+      }
 
       // Collect all game events
       for (const category of regularSeason.categories) {
