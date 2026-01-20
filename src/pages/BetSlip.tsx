@@ -15,6 +15,7 @@ import {
 import { useBetSlip, AltLine, LegStats } from '@/contexts/BetSlipContext';
 import { toast } from '@/hooks/use-toast';
 import { fetchStatsForLegs } from '@/hooks/usePlayerStats';
+import { useOdds } from '@/hooks/useOdds';
 
 const STAT_TYPES = [
   { value: 'pts', label: 'Points (PTS)' },
@@ -50,6 +51,8 @@ const BetSlip = () => {
   const [expandedLegs, setExpandedLegs] = useState<Set<string>>(new Set());
   const [saveStatus, setSaveStatus] = useState<Record<string, 'idle' | 'saving' | 'saved'>>({});
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [fetchingOddsFor, setFetchingOddsFor] = useState<string | null>(null);
+  const { fetchOddsForPlayer } = useOdds();
 
   const toggleExpand = (legId: string) => {
     setExpandedLegs(prev => {
@@ -120,9 +123,55 @@ const BetSlip = () => {
     }
   };
 
+  // Auto-fetch odds when stat type changes
+  const autoFetchOddsForLeg = useCallback(async (legId: string, statType: string) => {
+    const leg = legs.find(l => l.legId === legId);
+    if (!leg) return;
+
+    console.log(`🎯 autoFetchOddsForLeg STARTED for leg ${legId}, player: ${leg.player.name}, stat: ${statType}`);
+    setFetchingOddsFor(legId);
+
+    try {
+      const playerOdds = await fetchOddsForPlayer(leg.player.name, statType);
+
+      if (playerOdds) {
+        console.log(`🎯 Found odds for ${leg.player.name}:`, playerOdds);
+        updateLegDetails(legId, {
+          mainLine: playerOdds.line.toString(),
+          oddsOver: playerOdds.overOdds,
+          oddsUnder: playerOdds.underOdds,
+        });
+        saveLegDetails(legId);
+        
+        toast({
+          title: "Odds auto-populated",
+          description: `${leg.player.name}: Line ${playerOdds.line} (O: ${playerOdds.overOdds} / U: ${playerOdds.underOdds})`,
+        });
+      } else {
+        console.log(`🎯 No odds found for ${leg.player.name}`);
+        toast({
+          title: "Odds not found",
+          description: `No odds available for ${leg.player.name} ${statType.toUpperCase()}. Enter manually.`,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error auto-fetching odds:', error);
+      toast({
+        title: "Error fetching odds",
+        description: "Failed to fetch odds from API. Please enter manually.",
+        variant: "destructive",
+      });
+    } finally {
+      setFetchingOddsFor(null);
+    }
+  }, [legs, fetchOddsForPlayer, updateLegDetails, saveLegDetails]);
+
   const handleStatTypeChange = (legId: string, statType: string) => {
     const leg = legs.find(l => l.legId === legId);
     if (!leg) return;
+    
+    console.log(`🎯 Stat type change triggered for leg ${legId}: ${statType}`);
     
     if (leg.details.advancedMode) {
       const defaultLines = generateDefaultLines(statType);
@@ -134,6 +183,9 @@ const BetSlip = () => {
     } else {
       handleUpdateDetail(legId, 'statType', statType);
     }
+    
+    // Auto-fetch odds with statType passed directly (timing fix)
+    autoFetchOddsForLeg(legId, statType);
   };
 
   const addAltLine = (legId: string) => {

@@ -110,6 +110,24 @@ serve(async (req) => {
         params.append('season', currentSeason);
         break;
 
+      case 'odds':
+        // Get betting odds for a specific game
+        if (!gameId) throw new Error('gameId required');
+        endpoint = '/odds';
+        params.append('game', gameId.toString());
+        break;
+        
+      case 'odds-by-bet':
+        // Get odds for a specific bet type (player props)
+        // betId: 117=Points, 118=Assists, 119=Rebounds, 120=Triples, etc.
+        const { betId } = await req.json();
+        if (!betId) throw new Error('betId required');
+        endpoint = '/odds';
+        params.append('league', '12');
+        params.append('season', currentSeason);
+        params.append('bet', betId.toString());
+        break;
+
       default:
         throw new Error(`Unknown action: ${action}`);
     }
