@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt, Check, Layers, ChevronDown, ChevronUp, BarChart3, Loader2, AlertCircle, Zap } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, MinusCircle, Receipt, Check, Layers, ChevronDown, ChevronUp, BarChart3, Loader2, AlertCircle, Zap, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -47,6 +47,14 @@ const STAT_TYPE_LABELS: Record<string, string> = {
   ra: 'Reb + Ast',
 };
 
+interface FixtureInfo {
+  event_id: string;
+  game_date: string;
+  home_team_name: string;
+  away_team_name: string;
+  status: string;
+}
+
 interface DecisionCardProps {
   leg: BetSlipLeg;
   result: BetDecisionResult;
@@ -56,6 +64,7 @@ interface DecisionCardProps {
   stats?: LegStats;
   isExpanded: boolean;
   onToggleExpand: (legId: string) => void;
+  fixture?: FixtureInfo;
 }
 
 const DecisionCard = ({ 
@@ -67,6 +76,7 @@ const DecisionCard = ({
   stats,
   isExpanded,
   onToggleExpand,
+  fixture,
 }: DecisionCardProps) => {
   const getDecisionColor = (decision: string) => {
     switch (decision) {
@@ -106,6 +116,19 @@ const DecisionCard = ({
   const mainLine = leg.details.mainLine || '-';
   const hasStats = stats && stats.games.length > 0;
   const hasNoData = !stats || stats.games.length === 0;
+
+  // Format fixture info
+  const getOpponentInfo = () => {
+    if (!fixture) return null;
+    const teamLower = leg.player.team.toLowerCase();
+    const isHome = fixture.home_team_name?.toLowerCase().includes(teamLower);
+    const opponent = isHome ? fixture.away_team_name : fixture.home_team_name;
+    const prefix = isHome ? 'vs' : '@';
+    const gameDate = new Date(fixture.game_date);
+    const dateStr = gameDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    return { opponent, prefix, dateStr, eventId: fixture.event_id };
+  };
+  const opponentInfo = getOpponentInfo();
 
   return (
     <Card className={`${getDecisionBgColor(result.decision, isSelected)} transition-all`}>
@@ -154,7 +177,15 @@ const DecisionCard = ({
             </div>
             
             <h3 className="font-bold text-lg truncate">{leg.player.name}</h3>
-            <p className="text-sm text-muted-foreground">{leg.player.team}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm text-muted-foreground">{leg.player.team}</p>
+              {opponentInfo && (
+                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {opponentInfo.prefix} {opponentInfo.opponent} • {opponentInfo.dateStr}
+                </span>
+              )}
+            </div>
             
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <div className="bg-background/50 rounded-lg px-3 py-1.5">
@@ -796,19 +827,29 @@ const Decisions = () => {
 
             {/* Decision Cards */}
             <div className="space-y-4">
-              {decisions.map(({ leg, result, stats }, index) => (
-                <DecisionCard
-                  key={leg.legId}
-                  leg={leg}
-                  result={result}
-                  legNumber={index + 1}
-                  isSelected={selectedLegs.has(leg.legId)}
-                  onToggleSelect={toggleSelectLeg}
-                  stats={stats}
-                  isExpanded={expandedLegs.has(leg.legId)}
-                  onToggleExpand={toggleExpandLeg}
-                />
-              ))}
+              {decisions.map(({ leg, result, stats }, index) => {
+                // Find the fixture for this player's team
+                const teamLower = leg.player.team.toLowerCase();
+                const fixture = upcomingFixtures.find(f => 
+                  f.home_team_name?.toLowerCase().includes(teamLower) ||
+                  f.away_team_name?.toLowerCase().includes(teamLower)
+                );
+                
+                return (
+                  <DecisionCard
+                    key={leg.legId}
+                    leg={leg}
+                    result={result}
+                    legNumber={index + 1}
+                    isSelected={selectedLegs.has(leg.legId)}
+                    onToggleSelect={toggleSelectLeg}
+                    stats={stats}
+                    isExpanded={expandedLegs.has(leg.legId)}
+                    onToggleExpand={toggleExpandLeg}
+                    fixture={fixture}
+                  />
+                );
+              })}
             </div>
 
             {/* Action Buttons */}
