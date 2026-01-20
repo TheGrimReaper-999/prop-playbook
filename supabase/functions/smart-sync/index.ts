@@ -281,9 +281,29 @@ serve(async (req) => {
             const regularSeason = gamelog.seasonTypes?.find(
               (s: { displayName: string }) => s.displayName?.includes('Regular Season')
             );
-
-            // Get player name from gamelog info
-            const playerName = gamelog.info?.displayName || 'Unknown Player';
+            // Resolve player name: prioritize DB lookup, fallback to API response
+            let playerName = 'Unknown Player';
+            if (dbPlayerId) {
+              const { data: playerData } = await supabase
+                .from('nba_players')
+                .select('full_name')
+                .eq('id', dbPlayerId)
+                .maybeSingle();
+              playerName = playerData?.full_name || gamelog.info?.displayName || 'Unknown Player';
+            } else if (syncApiPlayerId) {
+              const { data: playerData } = await supabase
+                .from('nba_players')
+                .select('full_name')
+                .eq('api_player_id', syncApiPlayerId)
+                .maybeSingle();
+              playerName = playerData?.full_name || gamelog.info?.displayName || 'Unknown Player';
+            } else {
+              playerName = gamelog.info?.displayName || 'Unknown Player';
+            }
+            
+            if (playerName === 'Unknown Player') {
+              console.warn(`WARNING: Could not resolve player name for API ID ${syncApiPlayerId}, DB ID ${dbPlayerId}`);
+            }
 
             if (regularSeason?.categories) {
               const allStats: PlayerStats[] = [];
