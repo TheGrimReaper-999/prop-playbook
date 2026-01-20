@@ -132,20 +132,21 @@ const BetSlip = () => {
     setFetchingOddsFor(legId);
 
     try {
-      const playerOdds = await fetchOddsForPlayer(leg.player.name, statType);
+      // Pass team name to help find the correct game
+      const playerOdds = await fetchOddsForPlayer(leg.player.name, statType, leg.player.team);
 
       if (playerOdds) {
         console.log(`🎯 Found odds for ${leg.player.name}:`, playerOdds);
         updateLegDetails(legId, {
           mainLine: playerOdds.line.toString(),
-          oddsOver: playerOdds.overOdds,
-          oddsUnder: playerOdds.underOdds,
+          oddsOver: playerOdds.overOddsAmerican,
+          oddsUnder: playerOdds.underOddsAmerican,
         });
         saveLegDetails(legId);
         
         toast({
           title: "Odds auto-populated",
-          description: `${leg.player.name}: Line ${playerOdds.line} (O: ${playerOdds.overOdds} / U: ${playerOdds.underOdds})`,
+          description: `${leg.player.name}: Line ${playerOdds.line} (O: ${playerOdds.overOddsAmerican} / U: ${playerOdds.underOddsAmerican})`,
         });
       } else {
         console.log(`🎯 No odds found for ${leg.player.name}`);
