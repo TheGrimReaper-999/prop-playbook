@@ -57,6 +57,9 @@ export interface ParlayLeg {
   predictedSigma?: number;
   pOverModel?: number;
   pUnderModel?: number;
+  // Confidence and advanced model info
+  confidence?: string;
+  usedAdvancedModel?: boolean;
 }
 
 export interface SavedParlay {
@@ -65,6 +68,7 @@ export interface SavedParlay {
   legs: ParlayLeg[];
   createdAt: string;
   pnl?: number | null;
+  usedAdvancedModel?: boolean;
 }
 
 interface BetSlipContextType {
