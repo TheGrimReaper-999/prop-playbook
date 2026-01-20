@@ -7,10 +7,32 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useBetSlip, BetSlipLeg, ParlayLeg, LegStats } from '@/contexts/BetSlipContext';
-import { evaluateProp, BetDecisionResult } from '@/lib/betting-utils';
+import { evaluateProp, BetDecisionResult, ErrorTracker, calculateMovingAverage, calculateEma } from '@/lib/betting-utils';
 import { toast } from '@/hooks/use-toast';
 import { getStatValuesForType, fetchStatsForLegs } from '@/hooks/usePlayerStats';
 import StatsChart from '@/components/StatsChart';
+import { supabase } from '@/integrations/supabase/client';
+
+// DB error tracker shape
+interface DbErrorTracker {
+  id: string;
+  player_id: string;
+  stat_type: string;
+  error_ema: number;
+  recent_errors: number[];
+  beta: number;
+  total_predictions: number;
+}
+
+// Convert DB tracker to betting-utils ErrorTracker
+function toErrorTracker(dbTracker: DbErrorTracker): ErrorTracker {
+  return {
+    errorEma: dbTracker.error_ema,
+    recentErrors: dbTracker.recent_errors || [],
+    beta: dbTracker.beta,
+    maxResiduals: 20,
+  };
+}
 
 const STAT_TYPE_LABELS: Record<string, string> = {
   pts: 'Points',
@@ -239,6 +261,7 @@ const Decisions = () => {
   const [expandedLegs, setExpandedLegs] = useState<Set<string>>(new Set());
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [statsLoadAttempted, setStatsLoadAttempted] = useState(false);
+  const [errorTrackers, setErrorTrackers] = useState<Map<string, DbErrorTracker>>(new Map());
 
   // Check if we need to load stats (self-sufficient behavior)
   const missingStats = useMemo(() => {
@@ -247,6 +270,40 @@ const Decisions = () => {
       return !stats || stats.games.length === 0;
     });
   }, [legs, legStats]);
+
+  // Fetch error trackers for all players
+  useEffect(() => {
+    const fetchErrorTrackers = async () => {
+      const playerIds = legs.map(leg => leg.player.id).filter(Boolean);
+      if (playerIds.length === 0) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('player_error_trackers')
+          .select('*')
+          .in('player_id', playerIds);
+
+        if (error) {
+          console.error('[Decisions] Error fetching error trackers:', error);
+          return;
+        }
+
+        const trackerMap = new Map<string, DbErrorTracker>();
+        (data || []).forEach((tracker: DbErrorTracker) => {
+          // Key by player_id:stat_type
+          trackerMap.set(`${tracker.player_id}:${tracker.stat_type}`, tracker);
+        });
+        setErrorTrackers(trackerMap);
+        console.log(`[Decisions] Loaded ${trackerMap.size} error trackers`);
+      } catch (err) {
+        console.error('[Decisions] Error fetching error trackers:', err);
+      }
+    };
+
+    if (legs.length > 0) {
+      fetchErrorTrackers();
+    }
+  }, [legs]);
 
   // Auto-fetch stats if missing when page loads
   useEffect(() => {
@@ -319,17 +376,48 @@ const Decisions = () => {
         last10Stats = getStatValuesForType(stats.statValues, leg.details.statType, 10);
       }
 
+      // Get error tracker if available
+      const trackerKey = `${leg.player.id}:${leg.details.statType}`;
+      const dbTracker = errorTrackers.get(trackerKey);
+      const errorTracker = dbTracker ? toErrorTracker(dbTracker) : undefined;
+
       const result = evaluateProp({
         propLine,
         overOdds,
         underOdds,
         oddsFormat: leg.details.oddsFormat as 'american' | 'decimal' | 'multiplier',
         last10Stats,
+        errorTracker,
       });
 
-      return { leg, result, stats };
+      // Calculate predicted mean and sigma for storing predictions
+      let predictedMean: number | undefined;
+      let predictedSigma: number | undefined;
+      if (last10Stats && last10Stats.length > 0) {
+        const muMA = calculateMovingAverage(last10Stats);
+        const muEMA = calculateEma(last10Stats);
+        predictedMean = 0.6 * muEMA + 0.4 * muMA;
+        
+        // Apply bias correction if error tracker exists
+        if (errorTracker) {
+          predictedMean = predictedMean + 0.5 * errorTracker.errorEma;
+        }
+        
+        // Calculate sigma
+        const variance = last10Stats.reduce((sum, x) => sum + Math.pow(x - muMA, 2), 0) / (last10Stats.length - 1);
+        predictedSigma = Math.sqrt(variance);
+      }
+
+      return { 
+        leg, 
+        result, 
+        stats, 
+        predictedMean, 
+        predictedSigma,
+        hasErrorTracker: !!dbTracker,
+      };
     });
-  }, [legs, legStats]);
+  }, [legs, legStats, errorTrackers]);
 
   const summary = useMemo(() => {
     const takeOver = decisions.filter((d) => d.result.decision === 'TAKE OVER').length;
@@ -411,6 +499,11 @@ const Decisions = () => {
       oddsFormat: d.leg.details.oddsFormat,
       oddsOver: d.leg.details.oddsOver,
       oddsUnder: d.leg.details.oddsUnder,
+      // Include prediction metadata for error tracking
+      predictedMean: d.predictedMean,
+      predictedSigma: d.predictedSigma,
+      pOverModel: d.result.pOverModel,
+      pUnderModel: d.result.pUnderModel,
     }));
 
     // Store legs and show naming dialog

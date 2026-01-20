@@ -27,30 +27,18 @@ const getStatValue = (stats: any, statType: string): number => {
   const blk = stats.blocks || 0;
 
   switch (statType) {
-    case 'pts':
-      return pts;
-    case 'reb':
-      return reb;
-    case 'ast':
-      return ast;
-    case '3pm':
-      return fg3m;
-    case 'stl':
-      return stl;
-    case 'blk':
-      return blk;
-    case 'pra':
-      return pts + reb + ast;
-    case 'pr':
-      return pts + reb;
-    case 'pa':
-      return pts + ast;
-    case 'ra':
-      return reb + ast;
-    case 'stl+blk':
-      return stl + blk;
-    default:
-      return 0;
+    case 'pts': return pts;
+    case 'reb': return reb;
+    case 'ast': return ast;
+    case '3pm': return fg3m;
+    case 'stl': return stl;
+    case 'blk': return blk;
+    case 'pra': return pts + reb + ast;
+    case 'pr': return pts + reb;
+    case 'pa': return pts + ast;
+    case 'ra': return reb + ast;
+    case 'stl+blk': return stl + blk;
+    default: return 0;
   }
 };
 
@@ -60,81 +48,121 @@ const isGameFinished = (status: string): boolean => {
   return finishedStatuses.some(s => status?.toLowerCase().includes(s));
 };
 
-// Fetch and calculate status for a single leg
-const calculateLegStatus = async (leg: ParlayLeg, parlayCreatedAt: string): Promise<LegResult> => {
-  // Get player ID from database
-  const { data: player } = await supabase
-    .from('nba_players')
-    .select('id')
-    .ilike('full_name', leg.player.name)
-    .maybeSingle();
-
-  if (!player) {
-    return { legId: leg.legId, status: 'pending' };
-  }
-
-  // Get the most recent game stats AFTER the parlay was created
-  const { data: stats } = await supabase
-    .from('nba_player_stats')
-    .select('*, event_id')
-    .eq('player_id', player.id)
-    .gte('game_date', parlayCreatedAt)
-    .order('game_date', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (!stats) {
-    return { legId: leg.legId, status: 'pending' };
-  }
-
-  // Check if the game has finished
-  const { data: fixture } = await supabase
-    .from('nba_fixtures')
-    .select('status')
-    .eq('event_id', stats.event_id)
-    .maybeSingle();
-
-  if (!fixture || !isGameFinished(fixture.status)) {
-    return { legId: leg.legId, status: 'pending' };
-  }
-
-  // Game is finished, calculate result
-  const actualValue = getStatValue(stats, leg.statType);
-  const line = parseFloat(leg.mainLine);
-
-  let status: LegStatus = 'pending';
-  if (leg.decision === 'TAKE OVER') {
-    status = actualValue > line ? 'win' : 'loss';
-  } else if (leg.decision === 'TAKE UNDER') {
-    status = actualValue < line ? 'win' : 'loss';
-  }
-
-  return { legId: leg.legId, status, actualValue };
-};
-
 // Calculate overall parlay status
 const calculateParlayStatus = (legResults: LegResult[]): ParlayStatus => {
-  // If any leg lost, parlay is lost
-  if (legResults.some(r => r.status === 'loss')) {
-    return 'loss';
-  }
-  // If all legs won, parlay is won
-  if (legResults.every(r => r.status === 'win')) {
-    return 'win';
-  }
-  // Otherwise pending
+  if (legResults.some(r => r.status === 'loss')) return 'loss';
+  if (legResults.every(r => r.status === 'win')) return 'win';
   return 'pending';
 };
 
-// Fetch status for all parlays
+// OPTIMIZED: Batch fetch all data and compute statuses
 const fetchParlayStatuses = async (parlays: SavedParlay[]): Promise<Map<string, ParlayResult>> => {
   const results = new Map<string, ParlayResult>();
+  
+  if (parlays.length === 0) return results;
 
+  // 1. Collect all unique player names across all parlays
+  const allLegs = parlays.flatMap(p => p.legs);
+  const playerNames = [...new Set(allLegs.map(l => l.player.name))];
+  
+  if (playerNames.length === 0) return results;
+
+  // 2. Batch fetch all players
+  const { data: players } = await supabase
+    .from('nba_players')
+    .select('id, full_name')
+    .in('full_name', playerNames);
+
+  const playerIdMap = new Map<string, string>();
+  players?.forEach(p => playerIdMap.set(p.full_name.toLowerCase(), p.id));
+
+  // 3. Find earliest parlay date for stats query
+  const earliestDate = parlays.reduce((min, p) => 
+    p.createdAt < min ? p.createdAt : min, 
+    parlays[0]?.createdAt || new Date().toISOString()
+  );
+
+  const playerIds = Array.from(playerIdMap.values());
+  if (playerIds.length === 0) {
+    // No players found, return all pending
+    parlays.forEach(parlay => {
+      results.set(parlay.id, {
+        parlayId: parlay.id,
+        status: 'pending',
+        legResults: parlay.legs.map(l => ({ legId: l.legId, status: 'pending' })),
+      });
+    });
+    return results;
+  }
+
+  // 4. Batch fetch all stats for all players since earliest parlay
+  const { data: allStats } = await supabase
+    .from('nba_player_stats')
+    .select('*')
+    .in('player_id', playerIds)
+    .gte('game_date', earliestDate)
+    .order('game_date', { ascending: true });
+
+  // 5. Get unique event_ids and batch fetch fixture statuses
+  const eventIds = [...new Set((allStats || []).map(s => s.event_id))];
+  const { data: fixtures } = await supabase
+    .from('nba_fixtures')
+    .select('event_id, status')
+    .in('event_id', eventIds);
+
+  const fixtureStatusMap = new Map<string, string>();
+  fixtures?.forEach(f => fixtureStatusMap.set(f.event_id, f.status));
+
+  // 6. Group stats by player_id for efficient lookup
+  const statsByPlayer = new Map<string, typeof allStats>();
+  (allStats || []).forEach(stat => {
+    const existing = statsByPlayer.get(stat.player_id!) || [];
+    existing.push(stat);
+    statsByPlayer.set(stat.player_id!, existing);
+  });
+
+  // 7. Calculate status for each parlay
   for (const parlay of parlays) {
-    const legResults = await Promise.all(
-      parlay.legs.map(leg => calculateLegStatus(leg, parlay.createdAt))
-    );
-    
+    const legResults: LegResult[] = [];
+
+    for (const leg of parlay.legs) {
+      const playerId = playerIdMap.get(leg.player.name.toLowerCase());
+      
+      if (!playerId) {
+        legResults.push({ legId: leg.legId, status: 'pending' });
+        continue;
+      }
+
+      // Find first game after parlay creation
+      const playerStats = statsByPlayer.get(playerId) || [];
+      const relevantStat = playerStats.find(s => s.game_date >= parlay.createdAt);
+
+      if (!relevantStat) {
+        legResults.push({ legId: leg.legId, status: 'pending' });
+        continue;
+      }
+
+      // Check fixture status
+      const fixtureStatus = fixtureStatusMap.get(relevantStat.event_id);
+      if (!fixtureStatus || !isGameFinished(fixtureStatus)) {
+        legResults.push({ legId: leg.legId, status: 'pending' });
+        continue;
+      }
+
+      // Calculate result
+      const actualValue = getStatValue(relevantStat, leg.statType);
+      const line = parseFloat(leg.mainLine);
+
+      let status: LegStatus = 'pending';
+      if (leg.decision === 'TAKE OVER') {
+        status = actualValue > line ? 'win' : 'loss';
+      } else if (leg.decision === 'TAKE UNDER') {
+        status = actualValue < line ? 'win' : 'loss';
+      }
+
+      legResults.push({ legId: leg.legId, status, actualValue });
+    }
+
     results.set(parlay.id, {
       parlayId: parlay.id,
       status: calculateParlayStatus(legResults),
@@ -150,7 +178,7 @@ export const useParlayStatus = (parlays: SavedParlay[]) => {
     queryKey: ['parlay-status', parlays.map(p => p.id).join(',')],
     queryFn: () => fetchParlayStatuses(parlays),
     enabled: parlays.length > 0,
-    refetchInterval: 60000, // Auto-refresh every 60 seconds
+    refetchInterval: 60000,
     staleTime: 30000,
   });
 };

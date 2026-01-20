@@ -52,6 +52,11 @@ export interface ParlayLeg {
   oddsOver: string;
   oddsUnder: string;
   taken?: boolean;
+  // Prediction metadata for error tracking
+  predictedMean?: number;
+  predictedSigma?: number;
+  pOverModel?: number;
+  pUnderModel?: number;
 }
 
 export interface SavedParlay {
@@ -283,11 +288,40 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
       };
 
       setParlays((prev) => [newParlay, ...prev]);
+
+      // Store predictions for error tracking (fire and forget)
+      if (session?.user?.id) {
+        const predictions = parlayLegs
+          .filter(leg => leg.predictedMean !== undefined)
+          .map(leg => ({
+            user_id: session.user.id,
+            parlay_id: data.id,
+            player_id: leg.player.id,
+            player_name: leg.player.name,
+            stat_type: leg.statType,
+            prop_line: parseFloat(leg.mainLine),
+            predicted_mean: leg.predictedMean,
+            predicted_sigma: leg.predictedSigma,
+            p_over_model: leg.pOverModel,
+            p_under_model: leg.pUnderModel,
+            decision: leg.decision,
+          }));
+
+        if (predictions.length > 0) {
+          supabase.from('predictions').insert(predictions).then(({ error: predError }) => {
+            if (predError) {
+              console.error('Error storing predictions:', predError);
+            } else {
+              console.log(`[BetSlipContext] Stored ${predictions.length} predictions for error tracking`);
+            }
+          });
+        }
+      }
     } catch (err) {
       console.error('Error saving parlay:', err);
       throw err;
     }
-  }, []);
+  }, [session]);
 
   const deleteParlay = useCallback(async (parlayId: string) => {
     try {
