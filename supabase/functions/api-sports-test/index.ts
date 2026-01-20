@@ -19,13 +19,15 @@ serve(async (req) => {
       throw new Error('API_SPORTS_KEY not configured');
     }
 
-    const { action, playerId, gameId, teamId, season, date, gameIds } = await req.json();
+    // Parse body ONCE at the top
+    const body = await req.json();
+    const { action, playerId, gameId, teamId, season, date, gameIds, betId, search } = body;
     
     let endpoint = '';
     const params = new URLSearchParams();
 
-    // Default to current season (2025-2026) if not specified
-    const currentSeason = season || '2025-2026';
+    // Default to current season (2024-2025) if not specified
+    const currentSeason = season || '2024-2025';
     
     switch (action) {
       case 'test':
@@ -89,7 +91,6 @@ serve(async (req) => {
         
       case 'search-player':
         // Search for a player by name
-        const { search } = await req.json();
         if (!search) throw new Error('search required (min 3 chars)');
         endpoint = '/players';
         params.append('search', search);
@@ -120,14 +121,13 @@ serve(async (req) => {
       case 'odds-by-bet':
         // Get odds for a specific bet type (player props)
         // betId: 117=Points, 118=Assists, 119=Rebounds, 120=Triples, etc.
-        const { betId, gameId: oddsGameId } = await req.json();
         if (!betId) throw new Error('betId required');
         endpoint = '/odds';
         params.append('league', '12');
         params.append('season', currentSeason);
         params.append('bet', betId.toString());
-        if (oddsGameId) {
-          params.append('game', oddsGameId.toString());
+        if (gameId) {
+          params.append('game', gameId.toString());
         }
         break;
 
