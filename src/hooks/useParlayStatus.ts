@@ -121,7 +121,7 @@ const fetchParlayStatuses = async (parlays: SavedParlay[]): Promise<Map<string, 
     statsByPlayer.set(stat.player_id!, existing);
   });
 
-  // 7. Calculate status for each parlay
+// 7. Calculate status for each parlay
   for (const parlay of parlays) {
     const legResults: LegResult[] = [];
 
@@ -133,9 +133,16 @@ const fetchParlayStatuses = async (parlays: SavedParlay[]): Promise<Map<string, 
         continue;
       }
 
-      // Find first game after parlay creation
       const playerStats = statsByPlayer.get(playerId) || [];
-      const relevantStat = playerStats.find(s => s.game_date >= parlay.createdAt);
+      let relevantStat: typeof playerStats[0] | undefined;
+
+      // If leg has an eventId, use it directly for precise matching
+      if (leg.eventId) {
+        relevantStat = playerStats.find(s => s.event_id === leg.eventId);
+      } else {
+        // Fallback for old parlays: find first game after parlay creation
+        relevantStat = playerStats.find(s => s.game_date >= parlay.createdAt);
+      }
 
       if (!relevantStat) {
         legResults.push({ legId: leg.legId, status: 'pending' });
