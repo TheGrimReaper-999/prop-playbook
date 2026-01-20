@@ -117,15 +117,23 @@ const DecisionCard = ({
   const hasStats = stats && stats.games.length > 0;
   const hasNoData = !stats || stats.games.length === 0;
 
-  // Format fixture info
+  // Format fixture info - display in local system date
   const getOpponentInfo = () => {
     if (!fixture) return null;
     const teamLower = leg.player.team.toLowerCase();
     const isHome = fixture.home_team_name?.toLowerCase().includes(teamLower);
     const opponent = isHome ? fixture.away_team_name : fixture.home_team_name;
     const prefix = isHome ? 'vs' : '@';
+    
+    // Parse UTC date and display in local timezone
     const gameDate = new Date(fixture.game_date);
-    const dateStr = gameDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    // Format in user's local timezone
+    const dateStr = gameDate.toLocaleDateString(undefined, { 
+      weekday: 'short', 
+      month: 'short', 
+      day: 'numeric',
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    });
     return { opponent, prefix, dateStr, eventId: fixture.event_id };
   };
   const opponentInfo = getOpponentInfo();
@@ -343,13 +351,16 @@ const Decisions = () => {
   // Fetch upcoming fixtures to link parlays to specific games
   useEffect(() => {
     const fetchUpcomingFixtures = async () => {
-      const today = new Date().toISOString().split('T')[0];
+      // Use local date for query (start of today in local timezone)
+      const now = new Date();
+      const localToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const todayStr = localToday.toISOString();
       
       try {
         const { data, error } = await supabase
           .from('nba_fixtures')
           .select('event_id, game_date, home_team_name, away_team_name, status')
-          .gte('game_date', today)
+          .gte('game_date', todayStr)
           .order('game_date', { ascending: true })
           .limit(100);
 
@@ -359,7 +370,7 @@ const Decisions = () => {
         }
 
         setUpcomingFixtures(data || []);
-        console.log(`[Decisions] Loaded ${data?.length || 0} upcoming fixtures`);
+        console.log(`[Decisions] Loaded ${data?.length || 0} upcoming fixtures for games from ${todayStr}`);
       } catch (err) {
         console.error('[Decisions] Error fetching fixtures:', err);
       }
