@@ -6,7 +6,7 @@ import { teamMatchesAbbrev } from '@/lib/team-utils';
 export type LegStatus = 'pending' | 'win' | 'loss';
 export type ParlayStatus = 'pending' | 'win' | 'loss';
 
-interface LegResult {
+export interface LegResult {
   legId: string;
   status: LegStatus;
   actualValue?: number;
@@ -15,7 +15,7 @@ interface LegResult {
   gameDate?: string;
 }
 
-interface ParlayResult {
+export interface ParlayResult {
   parlayId: string;
   status: ParlayStatus;
   legResults: LegResult[];
