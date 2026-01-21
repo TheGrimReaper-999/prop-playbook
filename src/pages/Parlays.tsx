@@ -313,7 +313,7 @@ const Parlays = () => {
   const { data: parlayStatuses, refetch: refetchParlayStatus } = useParlayStatus(parlays);
   
   // Auto-sync player stats for pending parlay legs
-  const { isSyncing } = useAutoSyncParlayPlayers(parlays, parlayStatuses, refetchParlayStatus);
+  const { isSyncing, refreshAll } = useAutoSyncParlayPlayers(parlays, parlayStatuses, refetchParlayStatus);
   
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [renamingParlayId, setRenamingParlayId] = useState<string | null>(null);
@@ -525,13 +525,27 @@ const Parlays = () => {
           </Card>
         ) : (
           <div className="space-y-6">
-            {/* Syncing indicator */}
-            {isSyncing && (
-              <div className="flex items-center gap-2 text-muted-foreground bg-muted/50 rounded-lg px-4 py-3">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span className="text-sm">Syncing player stats for finished games...</span>
-              </div>
-            )}
+            {/* Syncing indicator / Refresh button */}
+            <div className="flex items-center justify-between">
+              {isSyncing ? (
+                <div className="flex items-center gap-2 text-muted-foreground bg-muted/50 rounded-lg px-4 py-2">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">Syncing player stats...</span>
+                </div>
+              ) : (
+                <div />
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshAll}
+                disabled={isSyncing}
+                className="gap-2"
+              >
+                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                Refresh All
+              </Button>
+            </div>
             {/* Total PnL */}
             <Card className={`border-2 ${totalPnl > 0 ? 'border-green-500/50 bg-green-500/10' : totalPnl < 0 ? 'border-red-500/50 bg-red-500/10' : 'border-border/50 bg-card/50'}`}>
               <CardContent className="p-6">
