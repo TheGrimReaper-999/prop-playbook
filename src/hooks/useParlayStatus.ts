@@ -107,12 +107,16 @@ const fetchParlayStatuses = async (parlays: SavedParlay[]): Promise<Map<string, 
     .gte('game_date', earliestDate)
     .order('game_date', { ascending: true });
 
-  // 5. Get unique event_ids and batch fetch fixture statuses with team info and game date
-  const eventIds = [...new Set((allStats || []).map(s => s.event_id))];
+  // 5. Get unique event_ids from stats AND from leg eventIds (for future games)
+  const statsEventIds = (allStats || []).map(s => s.event_id);
+  const legEventIds = allLegs.map(l => l.eventId).filter(Boolean) as string[];
+  const allEventIds = [...new Set([...statsEventIds, ...legEventIds])];
+  
+  // Batch fetch fixture statuses with team info and game date
   const { data: fixtures } = await supabase
     .from('nba_fixtures')
     .select('event_id, status, home_team_abbrev, away_team_abbrev, home_team_name, away_team_name, game_date')
-    .in('event_id', eventIds);
+    .in('event_id', allEventIds);
 
   const fixtureMap = new Map<string, typeof fixtures extends (infer T)[] | null ? T : never>();
   fixtures?.forEach(f => fixtureMap.set(f.event_id, f));
@@ -125,7 +129,7 @@ const fetchParlayStatuses = async (parlays: SavedParlay[]): Promise<Map<string, 
     statsByPlayer.set(stat.player_id!, existing);
   });
 
-// 7. Calculate status for each parlay
+  // 7. Calculate status for each parlay
   for (const parlay of parlays) {
     const legResults: LegResult[] = [];
 
@@ -148,23 +152,14 @@ const fetchParlayStatuses = async (parlays: SavedParlay[]): Promise<Map<string, 
         relevantStat = playerStats.find(s => s.game_date >= parlay.createdAt);
       }
 
-      if (!relevantStat) {
-        legResults.push({ legId: leg.legId, status: 'pending' });
-        continue;
-      }
-
-      // Get fixture info for opponent display
-      const fixture = fixtureMap.get(relevantStat.event_id);
-      const fixtureStatus = fixture?.status;
+      // Get fixture info for opponent display - use eventId directly if available
+      const fixtureEventId = relevantStat?.event_id || leg.eventId;
+      const fixture = fixtureEventId ? fixtureMap.get(fixtureEventId) : undefined;
       
-      if (!fixtureStatus || !isGameFinished(fixtureStatus)) {
-        legResults.push({ legId: leg.legId, status: 'pending' });
-        continue;
-      }
-
-      // Determine opponent and home/away status
+      // Determine opponent and home/away status (even for pending games)
       let opponentAbbrev: string | undefined;
       let isHome: boolean | undefined;
+      let gameDate: string | undefined = fixture?.game_date;
       
       if (fixture && leg.player.team) {
         const playerTeam = leg.player.team;
@@ -173,6 +168,18 @@ const fetchParlayStatuses = async (parlays: SavedParlay[]): Promise<Map<string, 
         opponentAbbrev = isHome 
           ? (fixture.away_team_abbrev || fixture.away_team_name || undefined)
           : (fixture.home_team_abbrev || fixture.home_team_name || undefined);
+      }
+
+      // If no stats yet or game not finished, return pending with opponent info
+      if (!relevantStat) {
+        legResults.push({ legId: leg.legId, status: 'pending', opponentAbbrev, isHome, gameDate });
+        continue;
+      }
+
+      const fixtureStatus = fixture?.status;
+      if (!fixtureStatus || !isGameFinished(fixtureStatus)) {
+        legResults.push({ legId: leg.legId, status: 'pending', opponentAbbrev, isHome, gameDate });
+        continue;
       }
 
       // Calculate result
@@ -186,7 +193,7 @@ const fetchParlayStatuses = async (parlays: SavedParlay[]): Promise<Map<string, 
         status = actualValue < line ? 'win' : 'loss';
       }
 
-      legResults.push({ legId: leg.legId, status, actualValue, opponentAbbrev, isHome, gameDate: fixture?.game_date });
+      legResults.push({ legId: leg.legId, status, actualValue, opponentAbbrev, isHome, gameDate });
     }
 
     results.set(parlay.id, {
