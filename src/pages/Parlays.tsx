@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil, Loader2, DollarSign, LogIn, Zap, Target } from 'lucide-react';
+import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil, Loader2, DollarSign, LogIn, Zap, Target, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { useBetSlip, SavedParlay, ParlayLeg } from '@/contexts/BetSlipContext';
 import { toast } from '@/hooks/use-toast';
 import { useParlayStatus, ParlayStatus, LegStatus } from '@/hooks/useParlayStatus';
 import { useAuth } from '@/hooks/useAuth';
+import { useAutoSyncParlayPlayers } from '@/hooks/useAutoSyncParlayPlayers';
 import Footer from '@/components/Footer';
 const STAT_TYPE_LABELS: Record<string, string> = {
   pts: 'Points',
@@ -309,7 +310,10 @@ const Parlays = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { parlays, parlaysLoading, deleteParlay, renameParlay, updateParlayPnl, updateParlayLegs, clearParlays } = useBetSlip();
-  const { data: parlayStatuses } = useParlayStatus(parlays);
+  const { data: parlayStatuses, refetch: refetchParlayStatus } = useParlayStatus(parlays);
+  
+  // Auto-sync player stats for pending parlay legs
+  const { isSyncing } = useAutoSyncParlayPlayers(parlays, parlayStatuses, refetchParlayStatus);
   
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [renamingParlayId, setRenamingParlayId] = useState<string | null>(null);
@@ -521,6 +525,13 @@ const Parlays = () => {
           </Card>
         ) : (
           <div className="space-y-6">
+            {/* Syncing indicator */}
+            {isSyncing && (
+              <div className="flex items-center gap-2 text-muted-foreground bg-muted/50 rounded-lg px-4 py-3">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span className="text-sm">Syncing player stats for finished games...</span>
+              </div>
+            )}
             {/* Total PnL */}
             <Card className={`border-2 ${totalPnl > 0 ? 'border-green-500/50 bg-green-500/10' : totalPnl < 0 ? 'border-red-500/50 bg-red-500/10' : 'border-border/50 bg-card/50'}`}>
               <CardContent className="p-6">
