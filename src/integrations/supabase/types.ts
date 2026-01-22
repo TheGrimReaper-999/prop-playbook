@@ -14,6 +14,141 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_sports_fixtures: {
+        Row: {
+          away_score_ot: number | null
+          away_score_q1: number | null
+          away_score_q2: number | null
+          away_score_q3: number | null
+          away_score_q4: number | null
+          away_score_total: number | null
+          away_team_id: number | null
+          away_team_logo: string | null
+          away_team_name: string | null
+          country_code: string | null
+          country_flag: string | null
+          country_id: number | null
+          country_name: string | null
+          created_at: string
+          game_date: string
+          game_id: number
+          game_time: string | null
+          game_timestamp: number | null
+          home_score_ot: number | null
+          home_score_q1: number | null
+          home_score_q2: number | null
+          home_score_q3: number | null
+          home_score_q4: number | null
+          home_score_total: number | null
+          home_team_id: number | null
+          home_team_logo: string | null
+          home_team_name: string | null
+          id: string
+          league_id: number | null
+          league_logo: string | null
+          league_name: string | null
+          league_season: string | null
+          league_type: string | null
+          raw_data: Json | null
+          stage: string | null
+          status_long: string | null
+          status_short: string | null
+          status_timer: string | null
+          timezone: string | null
+          updated_at: string
+          venue: string | null
+          week: string | null
+        }
+        Insert: {
+          away_score_ot?: number | null
+          away_score_q1?: number | null
+          away_score_q2?: number | null
+          away_score_q3?: number | null
+          away_score_q4?: number | null
+          away_score_total?: number | null
+          away_team_id?: number | null
+          away_team_logo?: string | null
+          away_team_name?: string | null
+          country_code?: string | null
+          country_flag?: string | null
+          country_id?: number | null
+          country_name?: string | null
+          created_at?: string
+          game_date: string
+          game_id: number
+          game_time?: string | null
+          game_timestamp?: number | null
+          home_score_ot?: number | null
+          home_score_q1?: number | null
+          home_score_q2?: number | null
+          home_score_q3?: number | null
+          home_score_q4?: number | null
+          home_score_total?: number | null
+          home_team_id?: number | null
+          home_team_logo?: string | null
+          home_team_name?: string | null
+          id?: string
+          league_id?: number | null
+          league_logo?: string | null
+          league_name?: string | null
+          league_season?: string | null
+          league_type?: string | null
+          raw_data?: Json | null
+          stage?: string | null
+          status_long?: string | null
+          status_short?: string | null
+          status_timer?: string | null
+          timezone?: string | null
+          updated_at?: string
+          venue?: string | null
+          week?: string | null
+        }
+        Update: {
+          away_score_ot?: number | null
+          away_score_q1?: number | null
+          away_score_q2?: number | null
+          away_score_q3?: number | null
+          away_score_q4?: number | null
+          away_score_total?: number | null
+          away_team_id?: number | null
+          away_team_logo?: string | null
+          away_team_name?: string | null
+          country_code?: string | null
+          country_flag?: string | null
+          country_id?: number | null
+          country_name?: string | null
+          created_at?: string
+          game_date?: string
+          game_id?: number
+          game_time?: string | null
+          game_timestamp?: number | null
+          home_score_ot?: number | null
+          home_score_q1?: number | null
+          home_score_q2?: number | null
+          home_score_q3?: number | null
+          home_score_q4?: number | null
+          home_score_total?: number | null
+          home_team_id?: number | null
+          home_team_logo?: string | null
+          home_team_name?: string | null
+          id?: string
+          league_id?: number | null
+          league_logo?: string | null
+          league_name?: string | null
+          league_season?: string | null
+          league_type?: string | null
+          raw_data?: Json | null
+          stage?: string | null
+          status_long?: string | null
+          status_short?: string | null
+          status_timer?: string | null
+          timezone?: string | null
+          updated_at?: string
+          venue?: string | null
+          week?: string | null
+        }
+        Relationships: []
+      }
       nba_fixtures: {
         Row: {
           away_team_abbrev: string | null
