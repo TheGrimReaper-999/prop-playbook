@@ -99,17 +99,6 @@ serve(async (req) => {
   }
 
   try {
-    // Validate CRON_SECRET for admin operations
-    const authHeader = req.headers.get('Authorization');
-    const expectedToken = Deno.env.get('CRON_SECRET');
-    
-    if (!authHeader || authHeader !== `Bearer ${expectedToken}`) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     const apiKey = Deno.env.get('RAPIDAPI_NBA_KEY');
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -120,15 +109,18 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Parse action from body
+    // Parse action from body first to determine auth requirements
     let action = 'full-sync';
     let maxApiCalls = 20; // Default per run
     let syncApiPlayerId: string | null = null;
     let syncDbPlayerId: string | null = null;
     let syncPlayerName: string | null = null;
     let syncTeamName: string | null = null;
+    
+    // Clone request to read body twice if needed
+    const bodyText = await req.text();
     try {
-      const body = await req.json();
+      const body = JSON.parse(bodyText);
       action = body?.action || 'full-sync';
       maxApiCalls = Math.min(body?.maxApiCalls || 20, 50);
       syncApiPlayerId = body?.apiPlayerId || null;
@@ -137,6 +129,44 @@ serve(async (req) => {
       syncTeamName = body?.teamName || null;
     } catch {
       // Use defaults
+    }
+
+    // Authentication: sync-player allows authenticated users, admin actions require CRON_SECRET
+    const authHeader = req.headers.get('Authorization');
+    
+    if (action === 'sync-player') {
+      // User-facing action: validate JWT
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const userClient = createClient(
+        supabaseUrl,
+        Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+
+      const token = authHeader.replace('Bearer ', '');
+      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
+      if (claimsError || !claimsData?.claims) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      // Admin/bulk actions: require CRON_SECRET
+      const expectedToken = Deno.env.get('CRON_SECRET');
+      
+      if (!authHeader || authHeader !== `Bearer ${expectedToken}`) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     const results = {
