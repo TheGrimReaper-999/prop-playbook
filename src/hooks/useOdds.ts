@@ -5,24 +5,13 @@ import {
   getParserForStatType,
   findPlayerOdds,
   ParsedPlayerOdds,
-  ApiSportsGame,
 } from '@/lib/api-sports';
+import { findApiSportsGameId } from './useGameId';
 
 interface FetchOddsOptions {
   statType: string;
   teamName?: string;
   gameId?: number;
-}
-
-/**
- * Get UTC date string in YYYY-MM-DD format
- */
-function getUTCDateString(): string {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(now.getUTCDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 }
 
 /**
@@ -42,49 +31,6 @@ function getCurrentNBASeason(): string {
   } else {
     // July onwards, new season starts in October
     return `${year}-${year + 1}`;
-  }
-}
-
-/**
- * Find the game ID for a player's team from today's schedule
- */
-async function findPlayerGame(teamName: string): Promise<number | null> {
-  try {
-    const utcDate = getUTCDateString();
-    const season = getCurrentNBASeason();
-    
-    console.log(`🔍 Looking for game for team: ${teamName} on ${utcDate} (season: ${season})`);
-    
-    const games = await apiSports.getGames({
-      league: 12,
-      season: season,
-      date: utcDate,
-    });
-    
-    console.log(`📅 Found ${games.length} games for today`);
-    
-    // Normalize team name for matching
-    const normalizedTeam = teamName.toLowerCase().trim();
-    
-    const game = games.find((g: ApiSportsGame) => {
-      const homeName = g.teams.home.name.toLowerCase();
-      const awayName = g.teams.away.name.toLowerCase();
-      return homeName.includes(normalizedTeam) || 
-             awayName.includes(normalizedTeam) ||
-             normalizedTeam.includes(homeName.split(' ').pop() || '') ||
-             normalizedTeam.includes(awayName.split(' ').pop() || '');
-    });
-    
-    if (game) {
-      console.log(`✅ Found game for ${teamName}: ${game.teams.home.name} vs ${game.teams.away.name} (ID: ${game.id})`);
-      return game.id;
-    }
-    
-    console.log(`❌ No game found for ${teamName} today`);
-    return null;
-  } catch (error) {
-    console.error('Error finding player game:', error);
-    return null;
   }
 }
 
@@ -115,10 +61,16 @@ export async function fetchOddsDirect({
   const season = getCurrentNBASeason();
 
   try {
-    // Get game ID if not provided but we have a team name
+    // Get game ID from database if not provided but we have a team name
     let targetGameId = gameId;
     if (!targetGameId && teamName) {
-      targetGameId = await findPlayerGame(teamName) || undefined;
+      const gameResult = await findApiSportsGameId(teamName);
+      if (gameResult) {
+        targetGameId = gameResult.gameId;
+        console.log(`✅ Found game from DB: ${gameResult.homeTeam} vs ${gameResult.awayTeam}`);
+      } else {
+        console.log(`❌ No game found in DB for team: ${teamName}`);
+      }
     }
 
     console.log(`🎯 Fetching odds with bet ID: ${betId}, game: ${targetGameId || 'all games'}, season: ${season}`);
