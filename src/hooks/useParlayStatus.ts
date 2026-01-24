@@ -191,8 +191,13 @@ const fetchParlayStatuses = async (parlays: SavedParlay[]): Promise<Map<string, 
         status = actualValue > line ? 'win' : 'loss';
       } else if (leg.decision === 'TAKE UNDER') {
         status = actualValue < line ? 'win' : 'loss';
+      } else if (leg.decision === 'NO BET') {
+        // For NO BET legs, mark as complete (neither win nor loss, but resolved)
+        // We use 'pending' status but still include actualValue so UI can display it
+        status = 'pending'; // Keep as pending since there's no win/loss outcome
       }
 
+      // Always include actualValue for finished games, regardless of decision type
       legResults.push({ legId: leg.legId, status, actualValue, opponentAbbrev, isHome, gameDate });
     }
 
