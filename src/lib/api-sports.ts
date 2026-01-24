@@ -126,6 +126,9 @@ export const apiSports = {
     const response = await this.request('odds-by-bet', {
       betId: params.bet,
       gameId: params.game,
+      league: params.league,
+      season: params.season,
+      bookmaker: params.bookmaker,
     });
     return response.data?.response || [];
   },
@@ -408,23 +411,28 @@ export function parsePlayerRunsOdds(odds: ApiSportsOdds[]): ParsedPlayerOdds[] {
 
 /**
  * Find odds for a specific player using fuzzy name matching
+ * Returns the main line (first one found) for the player
  */
 export function findPlayerOdds(allOdds: ParsedPlayerOdds[], playerName: string): ParsedPlayerOdds | null {
   const normalizedSearch = normalizePlayerName(playerName);
   
-  // Try exact match first
-  const exactMatch = allOdds.find(
+  // Find all matches for this player
+  const playerMatches = allOdds.filter(
     odds => normalizePlayerName(odds.playerName) === normalizedSearch
   );
-  if (exactMatch) return exactMatch;
-
-  // Try partial match (search name contains or is contained in player name)
-  const partialMatch = allOdds.find(odds => {
-    const normalizedOdds = normalizePlayerName(odds.playerName);
-    return normalizedOdds.includes(normalizedSearch) || normalizedSearch.includes(normalizedOdds);
-  });
   
-  return partialMatch || null;
+  if (playerMatches.length === 0) {
+    // Try partial match (search name contains or is contained in player name)
+    const partialMatch = allOdds.find(odds => {
+      const normalizedOdds = normalizePlayerName(odds.playerName);
+      return normalizedOdds.includes(normalizedSearch) || normalizedSearch.includes(normalizedOdds);
+    });
+    
+    return partialMatch || null;
+  }
+  
+  // Return the first match (main line)
+  return playerMatches[0];
 }
 
 /**
