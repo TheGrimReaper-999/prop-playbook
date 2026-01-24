@@ -315,37 +315,82 @@ const Decisions = () => {
   }, [legs, legStats]);
 
   // Fetch error trackers for all players
+  // First resolve database player IDs (in case some legs have API IDs instead of DB UUIDs)
   useEffect(() => {
     const fetchErrorTrackers = async () => {
-      const playerIds = legs.map(leg => leg.player.id).filter(Boolean);
-      if (playerIds.length === 0) return;
+      if (legs.length === 0) return;
 
       try {
+        // Get all unique player names to resolve their DB IDs
+        const playerNames = [...new Set(legs.map(leg => leg.player.name))];
+        
+        // Lookup players by name to get database UUIDs
+        const { data: players, error: playersError } = await supabase
+          .from('nba_players')
+          .select('id, full_name')
+          .in('full_name', playerNames);
+        
+        if (playersError) {
+          console.error('[Decisions] Error fetching players:', playersError);
+          return;
+        }
+
+        // Create a map of player name (lowercase) -> database UUID
+        const playerNameToId = new Map<string, string>();
+        (players || []).forEach(p => {
+          playerNameToId.set(p.full_name.toLowerCase(), p.id);
+        });
+
+        // Get unique database player IDs
+        const dbPlayerIds = [...new Set(
+          legs.map(leg => playerNameToId.get(leg.player.name.toLowerCase()))
+            .filter(Boolean)
+        )] as string[];
+
+        if (dbPlayerIds.length === 0) {
+          console.log('[Decisions] No matching players found in database for error trackers');
+          return;
+        }
+
+        // Fetch error trackers using resolved database IDs
         const { data, error } = await supabase
           .from('player_error_trackers')
           .select('*')
-          .in('player_id', playerIds);
+          .in('player_id', dbPlayerIds);
 
         if (error) {
           console.error('[Decisions] Error fetching error trackers:', error);
           return;
         }
 
+        // Key by player_id:stat_type (using db player ID)
         const trackerMap = new Map<string, DbErrorTracker>();
         (data || []).forEach((tracker: DbErrorTracker) => {
-          // Key by player_id:stat_type
           trackerMap.set(`${tracker.player_id}:${tracker.stat_type}`, tracker);
         });
+        
+        // Also create a reverse map so we can lookup by leg.player.id (which may be API ID)
+        // by resolving through the name
+        legs.forEach(leg => {
+          const dbId = playerNameToId.get(leg.player.name.toLowerCase());
+          if (dbId && dbId !== leg.player.id) {
+            // If the leg has an API ID, copy the tracker entries to also be keyed by the API ID
+            (data || []).forEach((tracker: DbErrorTracker) => {
+              if (tracker.player_id === dbId) {
+                trackerMap.set(`${leg.player.id}:${tracker.stat_type}`, tracker);
+              }
+            });
+          }
+        });
+
         setErrorTrackers(trackerMap);
-        console.log(`[Decisions] Loaded ${trackerMap.size} error trackers`);
+        console.log(`[Decisions] Loaded ${data?.length || 0} error trackers, mapped to ${trackerMap.size} keys`);
       } catch (err) {
         console.error('[Decisions] Error fetching error trackers:', err);
       }
     };
 
-    if (legs.length > 0) {
-      fetchErrorTrackers();
-    }
+    fetchErrorTrackers();
   }, [legs]);
 
   // Fetch upcoming fixtures to link parlays to specific games

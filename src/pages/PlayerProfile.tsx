@@ -352,6 +352,22 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
   const { data: playerInfo, isLoading: infoLoading } = usePlayerInfo(playerId);
   const { data: playerStats, isLoading: statsLoading } = usePlayerSplits(playerId);
   const { data: gamelog, isLoading: gamelogLoading } = usePlayerGameLog(playerId);
+  
+  // Lookup the database player ID by api_player_id for bet slip and error tracking
+  const { data: dbPlayer } = useQuery({
+    queryKey: ['db-player-by-api', playerId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('nba_players')
+        .select('id, full_name')
+        .eq('api_player_id', playerId)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!playerId,
+  });
 
   // Mutation to sync player data
   const syncMutation = useMutation({
@@ -437,7 +453,7 @@ const ApiPlayerProfile = ({ playerId }: { playerId: string }) => {
         country={playerInfo.country}
         exp={playerInfo.exp}
         draftInfo={draftInfo}
-        playerId={playerId}
+        playerId={dbPlayer?.id || playerId}
         apiPlayerId={playerId}
         onNavigateTeam={teamData ? () => navigate(`/team/${teamData.id}`) : undefined}
         onRefresh={() => syncMutation.mutate()}

@@ -239,10 +239,14 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle,
                       <span>{STAT_TYPE_LABELS[leg.statType] || leg.statType}</span>
                       <span>•</span>
                       <span>Line: {leg.mainLine}</span>
-                      {hasResult && actualValue !== undefined && (
+                      {actualValue !== undefined && (
                         <>
                           <span>•</span>
-                          <span className={legStatus === 'win' ? 'text-green-500 font-semibold' : 'text-red-500 font-semibold'}>
+                          <span className={
+                            legStatus === 'win' ? 'text-green-500 font-semibold' : 
+                            legStatus === 'loss' ? 'text-red-500 font-semibold' : 
+                            'text-muted-foreground font-semibold'
+                          }>
                             Actual: {actualValue}
                           </span>
                         </>
