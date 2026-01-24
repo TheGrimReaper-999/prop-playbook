@@ -122,6 +122,25 @@ const useGameDetails = (eventId: string) => {
   });
 };
 
+// Lookup team ID by name for navigation
+const useTeamId = (teamName: string | null | undefined) => {
+  return useQuery({
+    queryKey: ['team-by-name', teamName],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('nba_teams')
+        .select('id, name')
+        .ilike('name', `%${teamName}%`)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!teamName,
+    staleTime: 60 * 60 * 1000, // Cache for 1 hour
+  });
+};
+
 const useGamePlayerStats = (eventId: string) => {
   return useQuery({
     queryKey: ['game-player-stats', eventId],
@@ -215,6 +234,14 @@ const Matchup = () => {
   const { data: dbGame, isLoading: dbLoading, refetch: refetchGame } = useGameDetails(validEventId);
   const { data: playerStats, isLoading: statsLoading, refetch: refetchStats } = useGamePlayerStats(validEventId);
   const syncMutation = useSyncGameStats();
+
+  // Get team names for lookup
+  const homeTeamName = liveGame?.homeTeam?.name || dbGame?.home_team_name;
+  const awayTeamName = liveGame?.awayTeam?.name || dbGame?.away_team_name;
+  
+  // Lookup team IDs for navigation
+  const { data: homeTeam } = useTeamId(homeTeamName);
+  const { data: awayTeam } = useTeamId(awayTeamName);
 
   // Use live data for scores/status, fall back to DB for everything else
   const gameStatus = liveGame?.status || dbGame?.status || 'pre';
@@ -344,7 +371,10 @@ const Matchup = () => {
 
                 <div className="flex items-center justify-center gap-8">
                   {/* Away Team - use live data for scores */}
-                  <div className="text-center flex-1">
+                  <div 
+                    className={`text-center flex-1 ${awayTeam?.id ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+                    onClick={() => awayTeam?.id && navigate(`/team/${awayTeam.id}`)}
+                  >
                     {(liveGame?.awayTeam?.logo || dbGame?.away_team_logo) && (
                       <img 
                         src={liveGame?.awayTeam?.logo || dbGame?.away_team_logo || ''} 
@@ -352,7 +382,7 @@ const Matchup = () => {
                         className="w-20 h-20 mx-auto mb-2 object-contain"
                       />
                     )}
-                    <p className="font-bold text-lg">
+                    <p className={`font-bold text-lg ${awayTeam?.id ? 'hover:text-primary transition-colors' : ''}`}>
                       {liveGame?.awayTeam?.name || dbGame?.away_team_name || liveGame?.awayTeam?.abbreviation || dbGame?.away_team_abbrev}
                     </p>
                     {(liveGame?.awayTeam?.name || dbGame?.away_team_name) && (
@@ -371,7 +401,10 @@ const Matchup = () => {
                   <div className="text-2xl font-bold text-muted-foreground">VS</div>
 
                   {/* Home Team - use live data for scores */}
-                  <div className="text-center flex-1">
+                  <div 
+                    className={`text-center flex-1 ${homeTeam?.id ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+                    onClick={() => homeTeam?.id && navigate(`/team/${homeTeam.id}`)}
+                  >
                     {(liveGame?.homeTeam?.logo || dbGame?.home_team_logo) && (
                       <img 
                         src={liveGame?.homeTeam?.logo || dbGame?.home_team_logo || ''} 
@@ -379,7 +412,7 @@ const Matchup = () => {
                         className="w-20 h-20 mx-auto mb-2 object-contain"
                       />
                     )}
-                    <p className="font-bold text-lg">
+                    <p className={`font-bold text-lg ${homeTeam?.id ? 'hover:text-primary transition-colors' : ''}`}>
                       {liveGame?.homeTeam?.name || dbGame?.home_team_name || liveGame?.homeTeam?.abbreviation || dbGame?.home_team_abbrev}
                     </p>
                     {(liveGame?.homeTeam?.name || dbGame?.home_team_name) && (
