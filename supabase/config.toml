@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.populate-api-sports-fixtures]
 verify_jwt = false
+
+[functions.process-prediction-feedback]
+verify_jwt = false

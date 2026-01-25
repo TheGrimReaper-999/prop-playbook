@@ -296,32 +296,58 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setParlays((prev) => [newParlay, ...prev]);
 
       // Store predictions for error tracking (fire and forget)
+      // IMPORTANT: Resolve player names to database UUIDs for proper error tracking
       if (session?.user?.id) {
-        const predictions = parlayLegs
-          .filter(leg => leg.predictedMean !== undefined)
-          .map(leg => ({
-            user_id: session.user.id,
-            parlay_id: data.id,
-            player_id: leg.player.id,
-            player_name: leg.player.name,
-            stat_type: leg.statType,
-            prop_line: parseFloat(leg.mainLine),
-            predicted_mean: leg.predictedMean,
-            predicted_sigma: leg.predictedSigma,
-            p_over_model: leg.pOverModel,
-            p_under_model: leg.pUnderModel,
-            decision: leg.decision,
-          }));
+        // First resolve all player names to database UUIDs
+        const playerNames = [...new Set(parlayLegs.map(leg => leg.player.name))];
+        
+        supabase
+          .from('nba_players')
+          .select('id, full_name')
+          .in('full_name', playerNames)
+          .then(({ data: players, error: playersError }) => {
+            if (playersError) {
+              console.error('[BetSlipContext] Error resolving player IDs:', playersError);
+              return;
+            }
+            
+            // Create name -> UUID map (case-insensitive)
+            const nameToDbId = new Map<string, string>();
+            (players || []).forEach(p => {
+              nameToDbId.set(p.full_name.toLowerCase(), p.id);
+            });
+            
+            const predictions = parlayLegs
+              .filter(leg => leg.predictedMean !== undefined)
+              .map(leg => {
+                // Use database UUID, falling back to leg.player.id if not found
+                const dbPlayerId = nameToDbId.get(leg.player.name.toLowerCase()) || leg.player.id;
+                
+                return {
+                  user_id: session.user.id,
+                  parlay_id: data.id,
+                  player_id: dbPlayerId,
+                  player_name: leg.player.name,
+                  stat_type: leg.statType,
+                  prop_line: parseFloat(leg.mainLine),
+                  predicted_mean: leg.predictedMean,
+                  predicted_sigma: leg.predictedSigma,
+                  p_over_model: leg.pOverModel,
+                  p_under_model: leg.pUnderModel,
+                  decision: leg.decision,
+                };
+              });
 
-        if (predictions.length > 0) {
-          supabase.from('predictions').insert(predictions).then(({ error: predError }) => {
-            if (predError) {
-              console.error('Error storing predictions:', predError);
-            } else {
-              console.log(`[BetSlipContext] Stored ${predictions.length} predictions for error tracking`);
+            if (predictions.length > 0) {
+              supabase.from('predictions').insert(predictions).then(({ error: predError }) => {
+                if (predError) {
+                  console.error('[BetSlipContext] Error storing predictions:', predError);
+                } else {
+                  console.log(`[BetSlipContext] Stored ${predictions.length} predictions with resolved player IDs`);
+                }
+              });
             }
           });
-        }
       }
     } catch (err) {
       console.error('Error saving parlay:', err);
