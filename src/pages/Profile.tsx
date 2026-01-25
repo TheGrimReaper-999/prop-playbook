@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { useBetSlip } from '@/contexts/BetSlipContext';
+import { useCareerStats } from '@/hooks/useCareerStats';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Save, LogOut, User, Camera, Loader2, DollarSign } from 'lucide-react';
+import { ArrowLeft, Save, LogOut, User, Camera, Loader2, DollarSign, TrendingUp, CheckCircle2, XCircle, MinusCircle, Target } from 'lucide-react';
 import { toast } from 'sonner';
 import Footer from '@/components/Footer';
 
@@ -16,6 +17,7 @@ const Profile = () => {
   const { user, loading: authLoading, signOut } = useAuth();
   const { profile, loading: profileLoading, updateProfile, uploadAvatar } = useProfile();
   const { parlays } = useBetSlip();
+  const { data: careerStats, isLoading: careerStatsLoading } = useCareerStats();
   const [displayName, setDisplayName] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -184,6 +186,63 @@ const Profile = () => {
                 <span className={`text-2xl font-black ${totalPnl > 0 ? 'text-green-500' : totalPnl < 0 ? 'text-red-500' : 'text-foreground'}`}>
                   {totalPnl > 0 ? '+' : ''}{totalPnl.toFixed(2)}
                 </span>
+              </CardContent>
+            </Card>
+
+            {/* Career Stats */}
+            <Card className="border-border/50 bg-card/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <Target className="w-5 h-5 text-primary" />
+                  <CardTitle className="text-lg">Career Stats</CardTitle>
+                </div>
+                <CardDescription>Your prediction performance across all parlays</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {careerStatsLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : careerStats ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-background/50 rounded-lg p-3 text-center">
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        <TrendingUp className="w-4 h-4 text-primary" />
+                        <span className="text-xs text-muted-foreground">Legs Taken</span>
+                      </div>
+                      <p className="text-xl font-bold">{careerStats.legsTaken}</p>
+                    </div>
+                    <div className="bg-green-500/10 rounded-lg p-3 text-center">
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        <span className="text-xs text-muted-foreground">Wins</span>
+                      </div>
+                      <p className="text-xl font-bold text-green-500">{careerStats.legsWon}</p>
+                    </div>
+                    <div className="bg-red-500/10 rounded-lg p-3 text-center">
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        <XCircle className="w-4 h-4 text-red-500" />
+                        <span className="text-xs text-muted-foreground">Losses</span>
+                      </div>
+                      <p className="text-xl font-bold text-red-500">{careerStats.legsLost}</p>
+                    </div>
+                    <div className="bg-muted/50 rounded-lg p-3 text-center">
+                      <div className="flex items-center justify-center gap-1.5 mb-1">
+                        <MinusCircle className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">No Bets</span>
+                      </div>
+                      <p className="text-xl font-bold">{careerStats.noBets}</p>
+                    </div>
+                  </div>
+                ) : null}
+                {careerStats && careerStats.legsTaken > 0 && (
+                  <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Win Rate</span>
+                    <span className={`text-lg font-bold ${careerStats.winRate >= 50 ? 'text-green-500' : 'text-red-500'}`}>
+                      {careerStats.winRate.toFixed(1)}%
+                    </span>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

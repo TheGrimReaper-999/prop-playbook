@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil, Loader2, DollarSign, LogIn, Zap, Target, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil, Loader2, DollarSign, LogIn, Zap, Target, RefreshCw, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -537,7 +537,15 @@ const Parlays = () => {
                   <span className="text-sm">Syncing player stats...</span>
                 </div>
               ) : (
-                <div />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate('/profile')}
+                  className="gap-2"
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  View Career Stats
+                </Button>
               )}
               <Button
                 variant="outline"
