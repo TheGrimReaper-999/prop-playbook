@@ -14,6 +14,9 @@ interface ParlayLeg {
   mainLine?: number;
   decision: string;
   predictedMean?: number;
+  predictedSigma?: number;
+  eventId?: string;
+  taken?: boolean;
 }
 
 interface PlayerStats {
@@ -55,12 +58,15 @@ function getStatValue(stats: PlayerStats, statType: string): number {
       return stats.three_pt_made ?? 0;
     case 'pts+reb':
     case 'points+rebounds':
+    case 'pr':
       return (stats.points ?? 0) + (stats.rebounds ?? 0);
     case 'pts+ast':
     case 'points+assists':
+    case 'pa':
       return (stats.points ?? 0) + (stats.assists ?? 0);
     case 'reb+ast':
     case 'rebounds+assists':
+    case 'ra':
       return (stats.rebounds ?? 0) + (stats.assists ?? 0);
     case 'pra':
     case 'pts+reb+ast':
@@ -91,14 +97,17 @@ function calculateEma(stats: number[], weight: number = 0.6): number {
 }
 
 function calculateOutcome(decision: string, actualValue: number, propLine: number): 'win' | 'loss' | 'push' {
-  const isOver = decision.toLowerCase().includes('over');
+  const decisionUpper = decision.toUpperCase();
   
   if (actualValue === propLine) return 'push';
-  if (isOver) {
+  
+  if (decisionUpper.includes('OVER')) {
     return actualValue > propLine ? 'win' : 'loss';
-  } else {
+  } else if (decisionUpper.includes('UNDER')) {
     return actualValue < propLine ? 'win' : 'loss';
   }
+  
+  return 'push'; // NO BET case
 }
 
 function isGameFinished(status: string): boolean {
@@ -117,7 +126,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Parse request body for options
-    let options = { dryRun: false, limit: 100, parlayId: null as string | null };
+    let options = { dryRun: false, limit: 100, parlayId: null as string | null, forceReprocess: false };
     try {
       const body = await req.json();
       options = { ...options, ...body };
@@ -151,21 +160,16 @@ Deno.serve(async (req) => {
       if (!Array.isArray(legs)) continue;
 
       for (const leg of legs) {
-        // Skip legs that already have predictedMean (already processed by new system)
-        if (leg.predictedMean !== undefined) {
-          skippedLegs.push({ parlay: parlay.name, player: leg.player?.name || 'unknown', reason: 'already has predictedMean' });
-          continue;
-        }
-
-        // Skip legs without a decision
-        if (!leg.decision || leg.decision === 'NO BET') {
-          skippedLegs.push({ parlay: parlay.name, player: leg.player?.name || 'unknown', reason: 'no decision' });
-          continue;
-        }
-
         const playerName = leg.player?.name;
         if (!playerName) {
           skippedLegs.push({ parlay: parlay.name, player: 'unknown', reason: 'no player name' });
+          continue;
+        }
+
+        // Get prop line (supports both old 'mainLine' and new 'line' format)
+        const propLine = leg.line ?? leg.mainLine;
+        if (propLine === undefined) {
+          skippedLegs.push({ parlay: parlay.name, player: playerName, reason: 'no prop line found' });
           continue;
         }
 
@@ -192,77 +196,120 @@ Deno.serve(async (req) => {
           .eq('stat_type', leg.statType)
           .single();
 
-        if (existingPrediction) {
+        if (existingPrediction && !options.forceReprocess) {
           skippedLegs.push({ parlay: parlay.name, player: playerName, reason: 'prediction already exists' });
           continue;
         }
 
-        // Get player's games BEFORE parlay creation
-        const parlayCreatedAt = new Date(parlay.created_at);
-        const { data: historicalStats } = await supabase
-          .from('nba_player_stats')
-          .select('points, rebounds, assists, steals, blocks, turnovers, three_pt_made, game_date, event_id')
-          .eq('player_id', playerId)
-          .lt('game_date', parlayCreatedAt.toISOString())
-          .order('game_date', { ascending: false })
-          .limit(10);
+        // Check if leg already has prediction data from new system
+        let predictedMean = leg.predictedMean;
+        let predictedSigma = leg.predictedSigma;
+        let eventId = leg.eventId;
 
-        if (!historicalStats || historicalStats.length < 3) {
-          skippedLegs.push({ parlay: parlay.name, player: playerName, reason: `insufficient historical data (${historicalStats?.length || 0} games)` });
-          continue;
+        // If no prediction data, calculate from historical stats (old parlays)
+        if (predictedMean === undefined) {
+          const parlayCreatedAt = new Date(parlay.created_at);
+          const { data: historicalStats } = await supabase
+            .from('nba_player_stats')
+            .select('points, rebounds, assists, steals, blocks, turnovers, three_pt_made, game_date, event_id')
+            .eq('player_id', playerId)
+            .lt('game_date', parlayCreatedAt.toISOString())
+            .order('game_date', { ascending: false })
+            .limit(10);
+
+          if (!historicalStats || historicalStats.length < 3) {
+            skippedLegs.push({ parlay: parlay.name, player: playerName, reason: `insufficient historical data (${historicalStats?.length || 0} games)` });
+            continue;
+          }
+
+          // Calculate synthetic prediction from historical data
+          const statValues = historicalStats.map(s => getStatValue(s as PlayerStats, leg.statType));
+          const muMA = calculateMovingAverage(statValues);
+          const muEMA = calculateEma(statValues);
+          predictedMean = 0.6 * muEMA + 0.4 * muMA;
+          
+          const variance = statValues.reduce((sum, x) => sum + Math.pow(x - muMA, 2), 0) / (statValues.length - 1);
+          predictedSigma = Math.sqrt(variance);
         }
 
-        // Calculate synthetic prediction from historical data
-        const statValues = historicalStats.map(s => getStatValue(s as PlayerStats, leg.statType));
-        const muMA = calculateMovingAverage(statValues);
-        const muEMA = calculateEma(statValues);
-        const predictedMean = 0.6 * muEMA + 0.4 * muMA;
-        
-        const variance = statValues.reduce((sum, x) => sum + Math.pow(x - muMA, 2), 0) / (statValues.length - 1);
-        const predictedSigma = Math.sqrt(variance);
+        // Find the game to track - use eventId from leg if available
+        let gameStats: PlayerStats | null = null;
+        let fixtureStatus: string | null = null;
 
-        // Find player's NEXT game AFTER parlay creation
-        const { data: nextGameStats } = await supabase
-          .from('nba_player_stats')
-          .select('points, rebounds, assists, steals, blocks, turnovers, three_pt_made, game_date, event_id')
-          .eq('player_id', playerId)
-          .gte('game_date', parlayCreatedAt.toISOString())
-          .order('game_date', { ascending: true })
-          .limit(1)
-          .single();
+        if (eventId) {
+          // Use the eventId stored in the leg
+          const { data: stats } = await supabase
+            .from('nba_player_stats')
+            .select('points, rebounds, assists, steals, blocks, turnovers, three_pt_made, game_date, event_id')
+            .eq('player_id', playerId)
+            .eq('event_id', eventId)
+            .single();
+          
+          if (stats) {
+            gameStats = stats as PlayerStats;
+            
+            const { data: fixture } = await supabase
+              .from('nba_fixtures')
+              .select('status')
+              .eq('event_id', eventId)
+              .single();
+            
+            fixtureStatus = fixture?.status || null;
+          }
+        } else {
+          // Find player's NEXT game AFTER parlay creation
+          const parlayCreatedAt = new Date(parlay.created_at);
+          const { data: nextGameStats } = await supabase
+            .from('nba_player_stats')
+            .select('points, rebounds, assists, steals, blocks, turnovers, three_pt_made, game_date, event_id')
+            .eq('player_id', playerId)
+            .gte('game_date', parlayCreatedAt.toISOString())
+            .order('game_date', { ascending: true })
+            .limit(1)
+            .single();
 
-        if (!nextGameStats) {
-          skippedLegs.push({ parlay: parlay.name, player: playerName, reason: 'no game found after parlay creation' });
-          continue;
+          if (nextGameStats) {
+            gameStats = nextGameStats as PlayerStats;
+            eventId = nextGameStats.event_id;
+            
+            const { data: fixture } = await supabase
+              .from('nba_fixtures')
+              .select('status')
+              .eq('event_id', nextGameStats.event_id)
+              .single();
+            
+            fixtureStatus = fixture?.status || null;
+          }
         }
 
-        // Check if game is finished
-        const { data: fixture } = await supabase
-          .from('nba_fixtures')
-          .select('status')
-          .eq('event_id', nextGameStats.event_id)
-          .single();
+        // Determine if game is finished and we can calculate outcome
+        const gameFinished = fixtureStatus && isGameFinished(fixtureStatus);
+        let actualValue: number | null = null;
+        let outcome: 'win' | 'loss' | 'push' | null = null;
+        let error: number | null = null;
+        let processed = false;
 
-        if (!fixture || !isGameFinished(fixture.status)) {
-          skippedLegs.push({ parlay: parlay.name, player: playerName, reason: `game not finished (status: ${fixture?.status || 'unknown'})` });
-          continue;
+        if (gameFinished && gameStats) {
+          actualValue = getStatValue(gameStats, leg.statType);
+          
+          // Only calculate outcome for non-NO BET decisions
+          if (leg.decision && leg.decision !== 'NO BET') {
+            outcome = calculateOutcome(leg.decision, actualValue, propLine);
+          }
+          
+          error = actualValue - (predictedMean || 0);
+          processed = true;
+          console.log(`Processing: ${playerName} ${leg.statType} - predicted: ${predictedMean?.toFixed(1)}, actual: ${actualValue}, outcome: ${outcome || 'N/A'}`);
+        } else {
+          console.log(`Processing: ${playerName} ${leg.statType} - game not finished yet (status: ${fixtureStatus || 'unknown'})`);
         }
-
-        // Get prop line (supports both old 'mainLine' and new 'line' format)
-        const propLine = leg.line ?? leg.mainLine;
-        if (propLine === undefined) {
-          skippedLegs.push({ parlay: parlay.name, player: playerName, reason: 'no prop line found' });
-          continue;
-        }
-
-        // Calculate actual value and outcome
-        const actualValue = getStatValue(nextGameStats as PlayerStats, leg.statType);
-        const outcome = calculateOutcome(leg.decision, actualValue, propLine);
-        const error = actualValue - predictedMean;
-
-        console.log(`Processing: ${playerName} ${leg.statType} - predicted: ${predictedMean.toFixed(1)}, actual: ${actualValue}, outcome: ${outcome}`);
 
         if (!options.dryRun) {
+          // Delete existing prediction if force reprocessing
+          if (existingPrediction && options.forceReprocess) {
+            await supabase.from('predictions').delete().eq('id', existingPrediction.id);
+          }
+
           // Insert prediction record
           const { error: insertError } = await supabase.from('predictions').insert({
             parlay_id: parlay.id,
@@ -270,60 +317,61 @@ Deno.serve(async (req) => {
             player_name: playerName,
             stat_type: leg.statType,
             prop_line: propLine,
-            decision: leg.decision,
-            predicted_mean: predictedMean,
-            predicted_sigma: predictedSigma,
+            decision: leg.decision || 'NO BET',
+            predicted_mean: predictedMean || 0,
+            predicted_sigma: predictedSigma || 0,
             actual_value: actualValue,
             outcome: outcome,
-            event_id: nextGameStats.event_id,
-            processed: true,
+            event_id: eventId || null,
+            processed: processed,
             user_id: parlay.user_id,
           });
 
           if (insertError) {
             console.error(`Error inserting prediction for ${playerName}:`, insertError);
+            skippedLegs.push({ parlay: parlay.name, player: playerName, reason: `insert error: ${insertError.message}` });
             continue;
           }
 
           predictionsCreated++;
 
-          // Update or create error tracker
-          const { data: existingTracker } = await supabase
-            .from('player_error_trackers')
-            .select('*')
-            .eq('player_id', playerId)
-            .eq('stat_type', leg.statType)
-            .single();
-
-          if (existingTracker) {
-            // Update existing tracker
-            const beta = existingTracker.beta || 0.3;
-            const newErrorEma = beta * error + (1 - beta) * (existingTracker.error_ema || 0);
-            const recentErrors = [...(existingTracker.recent_errors || []), error].slice(-20);
-
-            await supabase
+          // Update error tracker only if game is finished
+          if (processed && error !== null) {
+            const { data: existingTracker } = await supabase
               .from('player_error_trackers')
-              .update({
-                error_ema: newErrorEma,
-                recent_errors: recentErrors,
-                total_predictions: (existingTracker.total_predictions || 0) + 1,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', existingTracker.id);
+              .select('*')
+              .eq('player_id', playerId)
+              .eq('stat_type', leg.statType)
+              .single();
 
-            trackersUpdated++;
-          } else {
-            // Create new tracker
-            await supabase.from('player_error_trackers').insert({
-              player_id: playerId,
-              stat_type: leg.statType,
-              error_ema: error,
-              recent_errors: [error],
-              total_predictions: 1,
-              beta: 0.3,
-            });
+            if (existingTracker) {
+              const beta = existingTracker.beta || 0.3;
+              const newErrorEma = beta * error + (1 - beta) * (existingTracker.error_ema || 0);
+              const recentErrors = [...(existingTracker.recent_errors || []), error].slice(-20);
 
-            trackersUpdated++;
+              await supabase
+                .from('player_error_trackers')
+                .update({
+                  error_ema: newErrorEma,
+                  recent_errors: recentErrors,
+                  total_predictions: (existingTracker.total_predictions || 0) + 1,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', existingTracker.id);
+
+              trackersUpdated++;
+            } else {
+              await supabase.from('player_error_trackers').insert({
+                player_id: playerId,
+                stat_type: leg.statType,
+                error_ema: error,
+                recent_errors: [error],
+                total_predictions: 1,
+                beta: 0.3,
+              });
+
+              trackersUpdated++;
+            }
           }
         }
 
@@ -331,7 +379,7 @@ Deno.serve(async (req) => {
           parlay: parlay.name,
           player: playerName,
           statType: leg.statType,
-          outcome: outcome,
+          outcome: outcome || 'pending',
         });
       }
     }
