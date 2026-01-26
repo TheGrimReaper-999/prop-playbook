@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Save, LogOut, User, Camera, Loader2, DollarSign, TrendingUp, CheckCircle2, XCircle, MinusCircle, Target } from 'lucide-react';
+import { ArrowLeft, Save, LogOut, User, Camera, Loader2, DollarSign, TrendingUp, CheckCircle2, XCircle, MinusCircle, Target, Trophy } from 'lucide-react';
 import { toast } from 'sonner';
 import Footer from '@/components/Footer';
 
@@ -242,6 +242,16 @@ const Profile = () => {
                       {careerStats.winRate.toFixed(1)}%
                     </span>
                   </div>
+                )}
+                {careerStats && (
+                  <Button 
+                    variant="outline" 
+                    className="w-full mt-3"
+                    onClick={() => navigate('/leaderboard')}
+                  >
+                    <Trophy className="w-4 h-4 mr-2" />
+                    View Leaderboard
+                  </Button>
                 )}
               </CardContent>
             </Card>
