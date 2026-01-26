@@ -14,6 +14,7 @@ import Auth from "./pages/Auth";
 import Profile from "./pages/Profile";
 import ImportData from "./pages/ImportData";
 import Matchup from "./pages/Matchup";
+import Leaderboard from "./pages/Leaderboard";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import Contact from "./pages/Contact";
@@ -37,6 +38,7 @@ const App = () => (
             <Route path="/betslip" element={<BetSlip />} />
             <Route path="/decisions" element={<Decisions />} />
             <Route path="/parlays" element={<Parlays />} />
+            <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/import" element={<ImportData />} />
             <Route path="/matchup/:eventId" element={<Matchup />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
