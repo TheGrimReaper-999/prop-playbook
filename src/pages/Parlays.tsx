@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil, Loader2, DollarSign, LogIn, Zap, Target, RefreshCw, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Trash2, TrendingUp, TrendingDown, MinusCircle, Layers, Calendar, Clock, CheckCircle2, XCircle, Pencil, Loader2, DollarSign, LogIn, Zap, Target, RefreshCw, BarChart3, Share2 } from 'lucide-react';
+import { toPng } from 'html-to-image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,6 +13,7 @@ import { useParlayStatus, ParlayStatus, LegStatus } from '@/hooks/useParlayStatu
 import { useAuth } from '@/hooks/useAuth';
 import { useAutoSyncParlayPlayers } from '@/hooks/useAutoSyncParlayPlayers';
 import Footer from '@/components/Footer';
+import ParlayShareCard from '@/components/ParlayShareCard';
 const STAT_TYPE_LABELS: Record<string, string> = {
   pts: 'Points',
   reb: 'Rebounds',
@@ -92,14 +94,16 @@ interface ParlayCardProps {
   onRename: (id: string) => void;
   onPnlUpdate: (id: string, pnl: number | null) => void;
   onLegTakenToggle: (parlayId: string, legId: string, taken: boolean) => void;
+  onShare: (parlayId: string) => void;
   status?: ParlayStatus;
   legStatuses?: Map<string, LegStatus>;
   legActualValues?: Map<string, number | undefined>;
   legOpponents?: Map<string, { abbrev: string; isHome: boolean; gameDate?: string } | undefined>;
   isDeleting?: boolean;
+  isSharing?: boolean;
 }
 
-const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle, status = 'pending', legStatuses, legActualValues, legOpponents, isDeleting }: ParlayCardProps) => {
+const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle, onShare, status = 'pending', legStatuses, legActualValues, legOpponents, isDeleting, isSharing }: ParlayCardProps) => {
   const [pnlInput, setPnlInput] = useState<string>(parlay.pnl?.toString() ?? '');
   const [isUpdatingPnl, setIsUpdatingPnl] = useState(false);
 
@@ -150,19 +154,35 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle,
                 <Pencil className="w-4 h-4" />
               </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onDelete(parlay.id)}
-              disabled={isDeleting}
-              className="flex-shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-            >
-              {isDeleting ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Trash2 className="w-5 h-5" />
-              )}
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onShare(parlay.id)}
+                disabled={isSharing}
+                className="flex-shrink-0 text-muted-foreground hover:text-primary hover:bg-primary/10 h-8 w-8"
+                title="Share parlay"
+              >
+                {isSharing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Share2 className="w-4 h-4" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onDelete(parlay.id)}
+                disabled={isDeleting}
+                className="flex-shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 w-8"
+              >
+                {isDeleting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
           </div>
           {/* Bottom row: Badges */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -324,6 +344,8 @@ const Parlays = () => {
   const [newParlayName, setNewParlayName] = useState('');
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
+  const [isSharing, setIsSharing] = useState<string | null>(null);
+  const shareCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   // Calculate total PnL - must be before early returns
   const totalPnl = useMemo(() => {
@@ -402,6 +424,108 @@ const Parlays = () => {
     }
   };
 
+  // Share parlay as image
+  const handleShare = useCallback(async (parlayId: string) => {
+    const parlay = parlays.find(p => p.id === parlayId);
+    if (!parlay) return;
+
+    setIsSharing(parlayId);
+    
+    try {
+      // Get the result status for this parlay
+      const result = parlayStatuses?.get(parlayId);
+      const legStatusMap = new Map<string, LegStatus>();
+      const legActualValuesMap = new Map<string, number | undefined>();
+      const legOpponentsMap = new Map<string, { abbrev: string; isHome: boolean; gameDate?: string } | undefined>();
+      
+      result?.legResults.forEach(lr => {
+        legStatusMap.set(lr.legId, lr.status);
+        legActualValuesMap.set(lr.legId, lr.actualValue);
+        if (lr.opponentAbbrev) {
+          legOpponentsMap.set(lr.legId, { abbrev: lr.opponentAbbrev, isHome: lr.isHome ?? false, gameDate: lr.gameDate });
+        }
+      });
+
+      // Create a temporary container for the share card
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      document.body.appendChild(container);
+
+      // Render the share card
+      const { createRoot } = await import('react-dom/client');
+      const root = createRoot(container);
+      
+      await new Promise<void>((resolve) => {
+        root.render(
+          <ParlayShareCard
+            parlay={parlay}
+            status={result?.status}
+            legStatuses={legStatusMap}
+            legActualValues={legActualValuesMap}
+            legOpponents={legOpponentsMap}
+          />
+        );
+        // Wait for render
+        setTimeout(resolve, 100);
+      });
+
+      const cardElement = container.firstElementChild as HTMLElement;
+      if (!cardElement) throw new Error('Failed to render share card');
+
+      // Generate the image
+      const dataUrl = await toPng(cardElement, {
+        quality: 1,
+        pixelRatio: 2,
+      });
+
+      // Clean up
+      root.unmount();
+      document.body.removeChild(container);
+
+      // Convert to blob for sharing
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], `${parlay.name.replace(/\s+/g, '-')}-parlay.png`, { type: 'image/png' });
+
+      // Try Web Share API first (mobile)
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: `${parlay.name} - Prop Decision`,
+          text: `Check out my ${parlay.legs.filter(l => l.taken !== false).length}-leg parlay!`,
+          files: [file],
+        });
+        toast({
+          title: "Shared!",
+          description: "Parlay shared successfully.",
+        });
+      } else {
+        // Fallback: download the image
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = `${parlay.name.replace(/\s+/g, '-')}-parlay.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        toast({
+          title: "Image saved",
+          description: "Parlay image downloaded to your device.",
+        });
+      }
+    } catch (error) {
+      console.error('Share error:', error);
+      toast({
+        title: "Share failed",
+        description: "Could not generate parlay image. Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSharing(null);
+    }
+  }, [parlays, parlayStatuses]);
+
   // Show auth prompt if not logged in - AFTER all hooks
   if (!authLoading && !user) {
     return (
@@ -429,7 +553,7 @@ const Parlays = () => {
           </div>
         </div>
 
-        <div className="max-w-4xl mx-auto p-6">
+      <div className="max-w-4xl mx-auto p-3 sm:p-6">
           <Card className="bg-card/50 border-border/50">
             <CardContent className="p-12 text-center">
               <div className="w-20 h-20 rounded-full bg-primary/20 mx-auto mb-4 flex items-center justify-center">
@@ -477,24 +601,25 @@ const Parlays = () => {
   return (
     <main className="min-h-screen bg-background">
       {/* Header */}
-      <div className="bg-gradient-to-b from-primary/20 to-background p-6">
+      <div className="bg-gradient-to-b from-primary/20 to-background p-4 sm:p-6">
         <div className="max-w-4xl mx-auto">
           <Button
             variant="ghost"
             onClick={() => navigate('/')}
-            className="mb-6 hover:bg-primary/10"
+            className="mb-4 sm:mb-6 hover:bg-primary/10 -ml-2"
+            size="sm"
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Home
+            Back
           </Button>
 
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-xl bg-primary/20 flex items-center justify-center">
-              <Layers className="w-8 h-8 text-primary" />
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <Layers className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
             </div>
             <div>
-              <h1 className="text-4xl font-black tracking-tight">Parlays</h1>
-              <p className="text-muted-foreground">
+              <h1 className="text-2xl sm:text-4xl font-black tracking-tight">Parlays</h1>
+              <p className="text-sm sm:text-base text-muted-foreground">
                 {parlays.length} parlay{parlays.length !== 1 ? 's' : ''}
               </p>
             </div>
@@ -528,23 +653,23 @@ const Parlays = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Syncing indicator / Refresh button */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
               {isSyncing ? (
-                <div className="flex items-center gap-2 text-muted-foreground bg-muted/50 rounded-lg px-4 py-2">
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span className="text-sm">Syncing player stats...</span>
+                <div className="flex items-center gap-2 text-muted-foreground bg-muted/50 rounded-lg px-3 py-1.5 text-xs sm:text-sm">
+                  <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+                  <span>Syncing...</span>
                 </div>
               ) : (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => navigate('/profile')}
-                  className="gap-2"
+                  className="gap-1.5 sm:gap-2 text-xs sm:text-sm h-8 sm:h-9"
                 >
-                  <BarChart3 className="w-4 h-4" />
-                  View Career Stats
+                  <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">View </span>Stats
                 </Button>
               )}
               <Button
@@ -552,32 +677,32 @@ const Parlays = () => {
                 size="sm"
                 onClick={refreshAll}
                 disabled={isSyncing}
-                className="gap-2"
+                className="gap-1.5 sm:gap-2 text-xs sm:text-sm h-8 sm:h-9"
               >
-                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                Refresh All
+                <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                Refresh
               </Button>
             </div>
             {/* Total PnL */}
             <Card className={`border-2 ${totalPnl > 0 ? 'border-green-500/50 bg-green-500/10' : totalPnl < 0 ? 'border-red-500/50 bg-red-500/10' : 'border-border/50 bg-card/50'}`}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+              <CardContent className="p-3 sm:p-6">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
                       totalPnl > 0 ? 'bg-green-500/20' : totalPnl < 0 ? 'bg-red-500/20' : 'bg-muted'
                     }`}>
-                      <DollarSign className={`w-6 h-6 ${
+                      <DollarSign className={`w-5 h-5 sm:w-6 sm:h-6 ${
                         totalPnl > 0 ? 'text-green-500' : totalPnl < 0 ? 'text-red-500' : 'text-muted-foreground'
                       }`} />
                     </div>
-                    <div>
-                      <h3 className="font-bold text-lg">Total P&L</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {parlaysWithPnl.length} of {parlays.length} parlays tracked
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-base sm:text-lg">Total P&L</h3>
+                      <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                        {parlaysWithPnl.length}/{parlays.length} tracked
                       </p>
                     </div>
                   </div>
-                  <span className={`text-3xl font-black ${
+                  <span className={`text-2xl sm:text-3xl font-black flex-shrink-0 ${
                     totalPnl > 0 ? 'text-green-500' : totalPnl < 0 ? 'text-red-500' : 'text-foreground'
                   }`}>
                     {totalPnl > 0 ? '+' : ''}{totalPnl.toFixed(2)}
@@ -622,11 +747,13 @@ const Parlays = () => {
                     onRename={handleStartRename}
                     onPnlUpdate={handlePnlUpdate}
                     onLegTakenToggle={handleLegTakenToggle}
+                    onShare={handleShare}
                     status={result?.status}
                     legStatuses={legStatusMap}
                     legActualValues={legActualValuesMap}
                     legOpponents={legOpponentsMap}
                     isDeleting={isDeleting === parlay.id}
+                    isSharing={isSharing === parlay.id}
                   />
                 );
               })}
@@ -637,11 +764,11 @@ const Parlays = () => {
             {/* Action Button */}
             <Card className="bg-primary/10 border-primary/30">
               <CardContent className="p-6">
-                <Button className="w-full" size="lg" onClick={() => navigate('/betslip')}>
-                  Create New BetSlip
-                </Button>
-              </CardContent>
-            </Card>
+            <Button className="w-full" size="default" onClick={() => navigate('/betslip')}>
+              Create New BetSlip
+            </Button>
+          </CardContent>
+        </Card>
           </div>
         )}
       </div>
