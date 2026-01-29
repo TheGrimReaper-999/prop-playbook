@@ -141,6 +141,112 @@ Deno.serve(async (req) => {
         });
       }
 
+      // Action: delete_leg - Remove a specific leg from a parlay and clean up predictions
+      if (action === 'delete_leg') {
+        const parlayId = body.id as string | undefined;
+        const legId = body.legId as string | undefined;
+
+        if (!parlayId || !legId) {
+          return new Response(JSON.stringify({ error: 'Parlay ID and Leg ID are required' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          });
+        }
+
+        console.log(`[parlays] Deleting leg ${legId} from parlay ${parlayId} for user: ${userId}`);
+
+        // First, get the current parlay to find the leg details
+        const { data: parlay, error: fetchError } = await supabase
+          .from('parlays')
+          .select('legs')
+          .eq('id', parlayId)
+          .eq('user_id', userId)
+          .single();
+
+        if (fetchError || !parlay) {
+          console.error(`[parlays] Error fetching parlay:`, fetchError);
+          return new Response(JSON.stringify({ error: 'Parlay not found' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 404,
+          });
+        }
+
+        const legs = Array.isArray(parlay.legs) ? parlay.legs : [];
+        const legToDelete = legs.find((l: { legId?: string }) => l.legId === legId);
+        const updatedLegs = legs.filter((l: { legId?: string }) => l.legId !== legId);
+
+        // Update parlay with remaining legs
+        const { data: updatedParlay, error: updateError } = await supabase
+          .from('parlays')
+          .update({ legs: updatedLegs })
+          .eq('id', parlayId)
+          .eq('user_id', userId)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.error(`[parlays] Error updating parlay:`, updateError);
+          throw updateError;
+        }
+
+        // Delete associated prediction if it exists (use service role for this)
+        // We match on parlay_id + player_name + stat_type to find the right prediction
+        if (legToDelete) {
+          const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+          if (serviceRoleKey) {
+            const adminClient = createClient(supabaseUrl, serviceRoleKey);
+            const { error: predError } = await adminClient
+              .from('predictions')
+              .delete()
+              .eq('parlay_id', parlayId)
+              .eq('player_name', legToDelete.player?.name || '')
+              .eq('stat_type', legToDelete.statType || '');
+            
+            if (predError) {
+              console.warn(`[parlays] Failed to delete prediction (non-critical):`, predError);
+            } else {
+              console.log(`[parlays] Deleted prediction for ${legToDelete.player?.name} ${legToDelete.statType}`);
+            }
+
+            // Also clean up error tracker if this was the only prediction for this player/stat combo
+            // Check if there are other predictions for this player/stat_type
+            const { data: remainingPreds } = await adminClient
+              .from('predictions')
+              .select('id')
+              .eq('player_name', legToDelete.player?.name || '')
+              .eq('stat_type', legToDelete.statType || '')
+              .limit(1);
+
+            if (!remainingPreds || remainingPreds.length === 0) {
+              // Find and delete the error tracker entry
+              const { data: player } = await adminClient
+                .from('nba_players')
+                .select('id')
+                .eq('full_name', legToDelete.player?.name || '')
+                .single();
+
+              if (player) {
+                const { error: trackerError } = await adminClient
+                  .from('player_error_trackers')
+                  .delete()
+                  .eq('player_id', player.id)
+                  .eq('stat_type', legToDelete.statType || '');
+                
+                if (!trackerError) {
+                  console.log(`[parlays] Deleted error tracker for ${legToDelete.player?.name} ${legToDelete.statType}`);
+                }
+              }
+            }
+          }
+        }
+
+        console.log(`[parlays] Leg deleted. Parlay now has ${updatedLegs.length} legs.`);
+
+        return new Response(JSON.stringify(updatedParlay), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // Default: create
       const { name, legs } = body;
 
