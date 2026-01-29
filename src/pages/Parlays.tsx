@@ -94,16 +94,18 @@ interface ParlayCardProps {
   onRename: (id: string) => void;
   onPnlUpdate: (id: string, pnl: number | null) => void;
   onLegTakenToggle: (parlayId: string, legId: string, taken: boolean) => void;
+  onDeleteLeg: (parlayId: string, legId: string) => void;
   onShare: (parlayId: string) => void;
   status?: ParlayStatus;
   legStatuses?: Map<string, LegStatus>;
   legActualValues?: Map<string, number | undefined>;
   legOpponents?: Map<string, { abbrev: string; isHome: boolean; gameDate?: string } | undefined>;
   isDeleting?: boolean;
+  isDeletingLeg?: string | null;
   isSharing?: boolean;
 }
 
-const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle, onShare, status = 'pending', legStatuses, legActualValues, legOpponents, isDeleting, isSharing }: ParlayCardProps) => {
+const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle, onDeleteLeg, onShare, status = 'pending', legStatuses, legActualValues, legOpponents, isDeleting, isDeletingLeg, isSharing }: ParlayCardProps) => {
   const [pnlInput, setPnlInput] = useState<string>(parlay.pnl?.toString() ?? '');
   const [isUpdatingPnl, setIsUpdatingPnl] = useState(false);
 
@@ -274,7 +276,7 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle,
                     </div>
                   </div>
                 </div>
-                {/* Decision + confidence + status */}
+                {/* Decision + confidence + status + delete */}
                 <div className="flex items-center gap-2 pl-7 sm:pl-0 flex-wrap">
                   {getDecisionIcon(leg.decision)}
                   <span className={`text-xs sm:text-sm font-semibold whitespace-nowrap ${getDecisionColor(leg.decision)}`}>
@@ -288,6 +290,21 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle,
                     </span>
                   )}
                   {legStatus && getLegStatusIcon(legStatus)}
+                  {/* Delete leg button */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onDeleteLeg(parlay.id, leg.legId)}
+                    disabled={isDeletingLeg === leg.legId}
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    title="Delete this leg"
+                  >
+                    {isDeletingLeg === leg.legId ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
+                  </Button>
                 </div>
               </div>
             );
@@ -333,7 +350,7 @@ const ParlayCard = ({ parlay, onDelete, onRename, onPnlUpdate, onLegTakenToggle,
 const Parlays = () => {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const { parlays, parlaysLoading, deleteParlay, renameParlay, updateParlayPnl, updateParlayLegs, clearParlays } = useBetSlip();
+  const { parlays, parlaysLoading, deleteParlay, deleteParlayLeg, renameParlay, updateParlayPnl, updateParlayLegs, clearParlays } = useBetSlip();
   const { data: parlayStatuses, refetch: refetchParlayStatus } = useParlayStatus(parlays);
   
   // Auto-sync player stats for pending parlay legs
@@ -343,6 +360,7 @@ const Parlays = () => {
   const [renamingParlayId, setRenamingParlayId] = useState<string | null>(null);
   const [newParlayName, setNewParlayName] = useState('');
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [isDeletingLeg, setIsDeletingLeg] = useState<string | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
   const [isSharing, setIsSharing] = useState<string | null>(null);
   const shareCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -390,6 +408,25 @@ const Parlays = () => {
       setRenamingParlayId(parlayId);
       setNewParlayName(parlay.name);
       setShowRenameDialog(true);
+    }
+  };
+
+  const handleDeleteLeg = async (parlayId: string, legId: string) => {
+    setIsDeletingLeg(legId);
+    try {
+      await deleteParlayLeg(parlayId, legId);
+      toast({
+        title: "Leg deleted",
+        description: "The leg and its prediction data have been removed.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete leg. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingLeg(null);
     }
   };
 
@@ -747,12 +784,14 @@ const Parlays = () => {
                     onRename={handleStartRename}
                     onPnlUpdate={handlePnlUpdate}
                     onLegTakenToggle={handleLegTakenToggle}
+                    onDeleteLeg={handleDeleteLeg}
                     onShare={handleShare}
                     status={result?.status}
                     legStatuses={legStatusMap}
                     legActualValues={legActualValuesMap}
                     legOpponents={legOpponentsMap}
                     isDeleting={isDeleting === parlay.id}
+                    isDeletingLeg={isDeletingLeg}
                     isSharing={isSharing === parlay.id}
                   />
                 );

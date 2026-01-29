@@ -91,6 +91,7 @@ interface BetSlipContextType {
   parlaysLoading: boolean;
   saveParlay: (legs: ParlayLeg[], name?: string) => Promise<void>;
   deleteParlay: (parlayId: string) => Promise<void>;
+  deleteParlayLeg: (parlayId: string, legId: string) => Promise<void>;
   renameParlay: (parlayId: string, newName: string) => Promise<void>;
   updateParlayPnl: (parlayId: string, pnl: number | null) => Promise<void>;
   updateParlayLegs: (parlayId: string, legs: ParlayLeg[]) => Promise<void>;
@@ -376,6 +377,34 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
+  const deleteParlayLeg = useCallback(async (parlayId: string, legId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('parlays', {
+        method: 'POST',
+        body: { action: 'delete_leg', id: parlayId, legId },
+      });
+
+      if (error) {
+        console.error('Error deleting parlay leg:', error);
+        throw error;
+      }
+
+      // Update local state with the returned parlay (which has updated legs)
+      if (data) {
+        setParlays((prev) =>
+          prev.map((p) => 
+            p.id === parlayId 
+              ? { ...p, legs: Array.isArray(data.legs) ? (data.legs as ParlayLeg[]) : [] }
+              : p
+          ).filter((p) => p.legs.length > 0) // Remove parlay if no legs left
+        );
+      }
+    } catch (err) {
+      console.error('Error deleting parlay leg:', err);
+      throw err;
+    }
+  }, []);
+
   const renameParlay = useCallback(async (parlayId: string, newName: string) => {
     try {
       // POST workaround (some environments block PUT requests)
@@ -464,6 +493,7 @@ export const BetSlipProvider: React.FC<{ children: React.ReactNode }> = ({ child
         parlaysLoading,
         saveParlay,
         deleteParlay,
+        deleteParlayLeg,
         renameParlay,
         updateParlayPnl,
         updateParlayLegs,
