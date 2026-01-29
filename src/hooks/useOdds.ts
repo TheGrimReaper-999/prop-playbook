@@ -1,215 +1,119 @@
 import { useState, useCallback } from 'react';
-import { 
-  apiSports, 
-  STAT_TYPE_TO_BET_ID,
-  getParserForStatType,
-  findPlayerOdds,
-  ParsedPlayerOdds,
-} from '@/lib/api-sports';
-import {
-  fetchTheOddsApiPlayerProps,
-  findTheOddsApiPlayerOdds,
-  TheOddsPlayerOdds,
-} from '@/lib/the-odds-api';
-import { findApiSportsGameId } from './useGameId';
+import { fetchPlayerProps, fetchAlternateLines, findPlayerOdds, debugPlayerNameMatches, fetchAllPlayerData as fetchAllPlayerDataApi, fetchPlayerPropsByGame, fetchAlternateLinesByGame, findPlayerGame, findPlayerGameByTeam, findMatchingPlayerOdds, PlayerOdds } from '@/lib/the-odds-api';
 
-interface FetchOddsOptions {
-  statType: string;
-  teamName?: string;
-  gameId?: number;
-}
+// Optimized player name normalization function
+const normalizePlayerName = (name: string): string => {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, '') // Remove non-letters except spaces
+    .replace(/\s+/g, ' ')     // Normalize spaces
+    .trim();
+};
 
-/**
- * Calculate NBA season string based on current date
- * NBA season runs from October to June
- * e.g., games in Jan 2025 are part of "2024-2025" season
- */
-function getCurrentNBASeason(): string {
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth(); // 0-indexed (0 = January)
+// Optimized player matching function
+const findMatchingPlayerOdds = (allOdds: PlayerOdds[], playerName: string): PlayerOdds[] => {
+  const normalizedSearch = normalizePlayerName(playerName);
   
-  // If we're in Jan-June, we're in the second half of the season
-  // Season started in October of previous year
-  if (month < 6) { // January (0) through June (5)
-    return `${year - 1}-${year}`;
-  } else {
-    // July onwards, new season starts in October
-    return `${year}-${year + 1}`;
-  }
-}
-
-/**
- * Fetch odds from The Odds API (primary source)
- */
-async function fetchFromTheOddsApi(
-  playerName: string,
-  statType: string,
-  teamName?: string
-): Promise<ParsedPlayerOdds | null> {
-  console.log(`🎲 Trying The Odds API for ${playerName} ${statType}`);
-  
-  try {
-    const allOdds = await fetchTheOddsApiPlayerProps(statType, teamName);
+  return allOdds.filter(odds => {
+    const normalizedOdds = normalizePlayerName(odds.playerName);
     
-    if (allOdds.length === 0) {
-      console.log(`🎲 The Odds API returned no odds for ${statType}`);
-      return null;
+    // Exact match first
+    if (normalizedOdds === normalizedSearch) {
+      return true;
     }
     
-    const playerOdds = findTheOddsApiPlayerOdds(allOdds, playerName);
-    
-    if (playerOdds) {
-      console.log(`🎲 Found odds from The Odds API for ${playerName}:`, playerOdds);
-      // Convert to ParsedPlayerOdds format for compatibility
-      return {
-        playerName: playerOdds.playerName,
-        line: playerOdds.line,
-        overOdds: playerOdds.overOdds,
-        underOdds: playerOdds.underOdds,
-        overOddsAmerican: playerOdds.overOddsAmerican,
-        underOddsAmerican: playerOdds.underOddsAmerican,
-        originalOverValue: `Over ${playerOdds.line}`,
-        originalUnderValue: `Under ${playerOdds.line}`,
-      };
-    }
-    
-    console.log(`🎲 No match for ${playerName} in The Odds API results`);
-    if (allOdds.length > 0) {
-      console.log('🎲 Available players:', allOdds.slice(0, 10).map(o => o.playerName));
-    }
-    return null;
-  } catch (error) {
-    console.error('🎲 The Odds API error:', error);
-    return null;
-  }
-}
+    // Try partial match (more efficient than includes both ways)
+    return normalizedOdds.includes(normalizedSearch) || normalizedSearch.includes(normalizedOdds);
+  });
+};
 
-/**
- * Fetch odds directly from API-Sports (fallback)
- * Useful for one-off fetches in callbacks
- */
-export async function fetchOddsDirect({ 
-  statType, 
-  teamName, 
-  gameId 
-}: FetchOddsOptions): Promise<ParsedPlayerOdds[]> {
-  console.log(`🔍 fetchOddsDirect called with statType: "${statType}", team: "${teamName}"`);
-  
-  if (!statType) {
-    console.log('❌ fetchOddsDirect: No statType provided');
-    return [];
-  }
-
-  const betId = STAT_TYPE_TO_BET_ID[statType];
-  if (!betId) {
-    console.log(`❌ No bet ID found for stat type: "${statType}"`);
-    throw new Error(`No odds available for stat type: ${statType}`);
-  }
-
-  console.log(`✅ Found bet ID ${betId} for stat type: ${statType}`);
-
-  const season = getCurrentNBASeason();
-
-  try {
-    // Get game ID from database if not provided but we have a team name
-    let targetGameId = gameId;
-    if (!targetGameId && teamName) {
-      const gameResult = await findApiSportsGameId(teamName);
-      if (gameResult) {
-        targetGameId = gameResult.gameId;
-        console.log(`✅ Found game from DB: ${gameResult.homeTeam} vs ${gameResult.awayTeam}`);
-      } else {
-        console.log(`❌ No game found in DB for team: ${teamName}`);
-      }
-    }
-
-    console.log(`🎯 Fetching odds with bet ID: ${betId}, game: ${targetGameId || 'all games'}, season: ${season}`);
-
-    // Fetch odds from API
-    const apiOdds = await apiSports.getOdds({
-      league: 12,
-      season: season,
-      bookmaker: 4, // Bet365
-      bet: betId,
-      game: targetGameId,
-    });
-
-    console.log(`📊 Received ${apiOdds.length} odds entries`);
-
-    // Parse odds using the appropriate parser
-    const parser = getParserForStatType(statType);
-    const parsedOdds = parser(apiOdds);
-
-    console.log(`✅ Parsed ${parsedOdds.length} player odds entries for ${statType}`);
-    return parsedOdds;
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : 'Failed to fetch odds';
-    console.error('Error in fetchOddsDirect:', errorMessage);
-    throw new Error(errorMessage);
-  }
-}
-
-interface UseOddsReturn {
+export interface UseOddsReturn {
   isLoading: boolean;
   error: string | null;
+  rateLimit: {
+    remaining: string | null;
+    used: string | null;
+    last: string | null;
+  } | null;
   fetchOddsForPlayer: (
-    playerName: string, 
-    statType: string, 
-    teamName?: string,
-    gameId?: number
-  ) => Promise<ParsedPlayerOdds | null>;
+    playerName: string,
+    statType: string
+  ) => Promise<PlayerOdds | null>;
+  fetchAlternateLinesForPlayer: (
+    playerName: string,
+    statType: string
+  ) => Promise<PlayerOdds[]>;
+  fetchAllPlayerData: (
+    playerName: string
+  ) => Promise<{
+    mainLines: Record<string, PlayerOdds>;
+    alternateLines: Record<string, PlayerOdds[]>;
+  }>;
+  fetchOddsForPlayerByGame: (
+    playerName: string,
+    statType: string
+  ) => Promise<PlayerOdds | null>;
+  fetchAlternateLinesForPlayerByGame: (
+    playerName: string,
+    statType: string
+  ) => Promise<PlayerOdds[]>;
+  fetchOddsForPlayerByTeam: (
+    playerName: string,
+    teamName: string,
+    statType: string
+  ) => Promise<PlayerOdds | null>;
+  fetchAlternateLinesForPlayerByTeam: (
+    playerName: string,
+    teamName: string,
+    statType: string
+  ) => Promise<PlayerOdds[]>;
 }
 
 /**
- * Hook for fetching and managing player prop odds
- * Tries The Odds API first (BetMGM/FanDuel), falls back to API-Sports (Bet365)
+ * Hook for fetching and managing player prop odds from The Odds API
+ * Implements the developer guide for NBA player props from BetMGM
  */
 export function useOdds(): UseOddsReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rateLimit, setRateLimit] = useState<{
+    remaining: string | null;
+    used: string | null;
+    last: string | null;
+  } | null>(null);
 
   const fetchOddsForPlayer = useCallback(async (
     playerName: string,
-    statType: string,
-    teamName?: string,
-    gameId?: number
-  ): Promise<ParsedPlayerOdds | null> => {
+    statType: string
+  ): Promise<PlayerOdds | null> => {
     setIsLoading(true);
     setError(null);
 
     try {
-      console.log(`🎯 Fetching odds for ${playerName}, stat: ${statType}, team: ${teamName}`);
+      console.log(`🎯 Fetching odds for ${playerName}, stat: ${statType}`);
 
-      // 1. Try The Odds API first (primary source)
-      const theOddsResult = await fetchFromTheOddsApi(playerName, statType, teamName);
-      if (theOddsResult) {
-        console.log(`✅ Got odds from The Odds API for ${playerName}`);
-        return theOddsResult;
+      // Fetch all odds for this stat type
+      const { odds, rateLimit: rateLimitInfo } = await fetchPlayerProps(statType);
+      
+      // Update rate limit info
+      if (rateLimitInfo) {
+        setRateLimit(rateLimitInfo);
       }
 
-      // 2. Fall back to API-Sports
-      console.log(`🔄 Falling back to API-Sports for ${playerName}`);
-      const betId = STAT_TYPE_TO_BET_ID[statType];
-      if (!betId) {
-        console.warn(`No bet ID mapping for stat type: ${statType}`);
-        return null;
-      }
-
-      // Fetch all odds for this stat type from API-Sports
-      const allOdds = await fetchOddsDirect({ statType, teamName, gameId });
-
-      console.log(`🎯 Received ${allOdds.length} player odds entries from API-Sports`);
+      console.log(`🎯 Received ${odds.length} player odds entries for ${statType}`);
 
       // Find the matching player
-      const playerOdds = findPlayerOdds(allOdds, playerName);
+      const playerOdds = findPlayerOdds(odds, playerName);
       
       if (playerOdds) {
-        console.log(`✅ Found odds from API-Sports for ${playerName}:`, playerOdds);
+        console.log(`✅ Found odds for ${playerName}:`, playerOdds);
       } else {
-        console.log(`❌ No odds found for ${playerName} in either API`);
-        if (allOdds.length > 0) {
-          console.log('Available players:', allOdds.slice(0, 10).map(o => o.playerName));
+        console.log(`❌ No odds found for ${playerName}`);
+        if (odds.length > 0) {
+          console.log('Available players (first 5):', odds.slice(0, 5).map(o => o.playerName));
+          debugPlayerNameMatches(odds, playerName);
+        } else {
+          console.log(`❌ No odds data received for stat type: ${statType}`);
         }
       }
 
@@ -224,9 +128,280 @@ export function useOdds(): UseOddsReturn {
     }
   }, []);
 
+  const fetchAlternateLinesForPlayer = useCallback(async (
+    playerName: string,
+    statType: string
+  ): Promise<PlayerOdds[]> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      console.log(`🎯 Fetching alternate lines for ${playerName}, stat: ${statType}`);
+
+      // Fetch all alternate odds for this stat type
+      const { odds, rateLimit: rateLimitInfo } = await fetchAlternateLines(statType);
+      
+      // Update rate limit info
+      if (rateLimitInfo) {
+        setRateLimit(rateLimitInfo);
+      }
+
+      console.log(`🎯 Received ${odds.length} alternate line entries for ${statType}`);
+
+      // Find all matching player odds (alternate lines can have multiple entries per player)
+      const playerAlternateOdds = findMatchingPlayerOdds(odds, playerName);
+
+      console.log(`🎯 Found ${playerAlternateOdds.length} alternate lines for ${playerName}`);
+
+      return playerAlternateOdds;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch alternate lines';
+      console.error('Error fetching alternate lines:', err);
+      setError(message);
+      return [];
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const fetchAllPlayerData = useCallback(async (
+    playerName: string
+  ): Promise<{
+    mainLines: Record<string, PlayerOdds>;
+    alternateLines: Record<string, PlayerOdds[]>;
+  }> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      console.log(`🎯 Fetching all player data for ${playerName}`);
+
+      const { mainLines, alternateLines, rateLimit: rateLimitInfo } = await fetchAllPlayerDataApi(playerName);
+      
+      // Update rate limit info
+      if (rateLimitInfo) {
+        setRateLimit(rateLimitInfo);
+      }
+
+      console.log(`🎯 Received complete data for ${playerName}: ${Object.keys(mainLines).length} main lines, ${Object.keys(alternateLines).length} alternate line types`);
+
+      return { mainLines, alternateLines };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch player data';
+      console.error('Error fetching player data:', err);
+      setError(message);
+      return { mainLines: {}, alternateLines: {} };
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const fetchOddsForPlayerByGame = useCallback(async (
+    playerName: string,
+    statType: string
+  ): Promise<PlayerOdds | null> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      console.log(`🎯 Fetching odds for ${playerName} by game, stat: ${statType}`);
+
+      // First find which game the player is in
+      const eventId = await findPlayerGame(playerName);
+      
+      if (!eventId) {
+        console.log(`❌ Could not find game for ${playerName}`);
+        return null;
+      }
+
+      // Fetch odds for that specific game
+      const { odds, rateLimit: rateLimitInfo } = await fetchPlayerPropsByGame(eventId, statType);
+      
+      // Update rate limit info
+      if (rateLimitInfo) {
+        setRateLimit(rateLimitInfo);
+      }
+
+      console.log(`🎯 Received ${odds.length} player odds from game ${eventId} for ${statType}`);
+
+      // Find the matching player
+      const playerOdds = findPlayerOdds(odds, playerName);
+      
+      if (playerOdds) {
+        console.log(`✅ Found odds for ${playerName}:`, playerOdds);
+      } else {
+        console.log(`❌ No odds found for ${playerName} in this game`);
+        if (odds.length > 0) {
+          console.log('Available players in this game (first 10):', odds.slice(0, 10).map(o => o.playerName));
+          debugPlayerNameMatches(odds, playerName);
+        }
+      }
+
+      return playerOdds;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch odds by game';
+      console.error('Error fetching odds by game:', err);
+      setError(message);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const fetchAlternateLinesForPlayerByGame = useCallback(async (
+    playerName: string,
+    statType: string
+  ): Promise<PlayerOdds[]> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      console.log(`🎯 Fetching alternate lines for ${playerName} by game, stat: ${statType}`);
+
+      // First find which game the player is in
+      const eventId = await findPlayerGame(playerName);
+      
+      if (!eventId) {
+        console.log(`❌ Could not find game for ${playerName}`);
+        return [];
+      }
+
+      // Fetch alternate lines for that specific game
+      const { odds, rateLimit: rateLimitInfo } = await fetchAlternateLinesByGame(eventId, statType);
+      
+      // Update rate limit info
+      if (rateLimitInfo) {
+        setRateLimit(rateLimitInfo);
+      }
+
+      console.log(`🎯 Received ${odds.length} alternate line entries from game ${eventId} for ${statType}`);
+
+      // Find all matching player odds
+      const playerAlternateOdds = findMatchingPlayerOdds(odds, playerName);
+
+      console.log(`🎯 Found ${playerAlternateOdds.length} alternate lines for ${playerName}`);
+
+      return playerAlternateOdds;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch alternate lines by game';
+      console.error('Error fetching alternate lines by game:', err);
+      setError(message);
+      return [];
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const fetchOddsForPlayerByTeam = useCallback(async (
+    playerName: string,
+    teamName: string,
+    statType: string
+  ): Promise<PlayerOdds | null> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      console.log(`🎯 Fetching odds for ${playerName} by team (${teamName}), stat: ${statType}`);
+
+      // First find the team's game
+      const eventId = await findPlayerGameByTeam(playerName, teamName);
+      
+      if (!eventId) {
+        console.log(`❌ Could not find game for ${playerName} in team ${teamName}`);
+        return null;
+      }
+
+      // Fetch odds for that specific game
+      const { odds, rateLimit: rateLimitInfo } = await fetchPlayerPropsByGame(eventId, statType);
+      
+      // Update rate limit info
+      if (rateLimitInfo) {
+        setRateLimit(rateLimitInfo);
+      }
+
+      console.log(`🎯 Received ${odds.length} player odds from team game ${eventId} for ${statType}`);
+
+      // Find the matching player
+      const playerOdds = findPlayerOdds(odds, playerName);
+      
+      if (playerOdds) {
+        console.log(`✅ Found odds for ${playerName}:`, playerOdds);
+      } else {
+        console.log(`❌ No odds found for ${playerName} in team game`);
+        if (odds.length > 0) {
+          console.log('Available players in this game (first 5):', odds.slice(0, 5).map(o => o.playerName));
+          debugPlayerNameMatches(odds, playerName);
+        } else {
+          console.log(`❌ No odds data received for team game and stat type: ${statType}`);
+        }
+      }
+
+      return playerOdds;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch odds by team';
+      console.error('Error fetching odds by team:', err);
+      setError(message);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const fetchAlternateLinesForPlayerByTeam = useCallback(async (
+    playerName: string,
+    teamName: string,
+    statType: string
+  ): Promise<PlayerOdds[]> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      console.log(`🎯 Fetching alternate lines for ${playerName} by team (${teamName}), stat: ${statType}`);
+
+      // First find the team's game
+      const eventId = await findPlayerGameByTeam(playerName, teamName);
+      
+      if (!eventId) {
+        console.log(`❌ Could not find game for ${playerName} in team ${teamName}`);
+        return [];
+      }
+
+      // Fetch alternate lines for that specific game
+      const { odds, rateLimit: rateLimitInfo } = await fetchAlternateLinesByGame(eventId, statType);
+      
+      // Update rate limit info
+      if (rateLimitInfo) {
+        setRateLimit(rateLimitInfo);
+      }
+
+      console.log(`🎯 Received ${odds.length} alternate line entries from team game ${eventId} for ${statType}`);
+
+      // Find all matching player odds
+      const playerAlternateOdds = findMatchingPlayerOdds(odds, playerName);
+
+      console.log(`🎯 Found ${playerAlternateOdds.length} alternate lines for ${playerName}`);
+
+      return playerAlternateOdds;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch alternate lines by team';
+      console.error('Error fetching alternate lines by team:', err);
+      setError(message);
+      return [];
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   return {
     isLoading,
     error,
+    rateLimit,
     fetchOddsForPlayer,
+    fetchAlternateLinesForPlayer,
+    fetchAllPlayerData,
+    fetchOddsForPlayerByGame,
+    fetchAlternateLinesForPlayerByGame,
+    fetchOddsForPlayerByTeam,
+    fetchAlternateLinesForPlayerByTeam,
   };
 }
