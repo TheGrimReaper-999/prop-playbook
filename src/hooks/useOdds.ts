@@ -6,6 +6,11 @@ import {
   findPlayerOdds,
   ParsedPlayerOdds,
 } from '@/lib/api-sports';
+import {
+  fetchTheOddsApiPlayerProps,
+  findTheOddsApiPlayerOdds,
+  TheOddsPlayerOdds,
+} from '@/lib/the-odds-api';
 import { findApiSportsGameId } from './useGameId';
 
 interface FetchOddsOptions {
@@ -35,7 +40,53 @@ function getCurrentNBASeason(): string {
 }
 
 /**
- * Fetch odds directly without React state management
+ * Fetch odds from The Odds API (primary source)
+ */
+async function fetchFromTheOddsApi(
+  playerName: string,
+  statType: string,
+  teamName?: string
+): Promise<ParsedPlayerOdds | null> {
+  console.log(`🎲 Trying The Odds API for ${playerName} ${statType}`);
+  
+  try {
+    const allOdds = await fetchTheOddsApiPlayerProps(statType, teamName);
+    
+    if (allOdds.length === 0) {
+      console.log(`🎲 The Odds API returned no odds for ${statType}`);
+      return null;
+    }
+    
+    const playerOdds = findTheOddsApiPlayerOdds(allOdds, playerName);
+    
+    if (playerOdds) {
+      console.log(`🎲 Found odds from The Odds API for ${playerName}:`, playerOdds);
+      // Convert to ParsedPlayerOdds format for compatibility
+      return {
+        playerName: playerOdds.playerName,
+        line: playerOdds.line,
+        overOdds: playerOdds.overOdds,
+        underOdds: playerOdds.underOdds,
+        overOddsAmerican: playerOdds.overOddsAmerican,
+        underOddsAmerican: playerOdds.underOddsAmerican,
+        originalOverValue: `Over ${playerOdds.line}`,
+        originalUnderValue: `Under ${playerOdds.line}`,
+      };
+    }
+    
+    console.log(`🎲 No match for ${playerName} in The Odds API results`);
+    if (allOdds.length > 0) {
+      console.log('🎲 Available players:', allOdds.slice(0, 10).map(o => o.playerName));
+    }
+    return null;
+  } catch (error) {
+    console.error('🎲 The Odds API error:', error);
+    return null;
+  }
+}
+
+/**
+ * Fetch odds directly from API-Sports (fallback)
  * Useful for one-off fetches in callbacks
  */
 export async function fetchOddsDirect({ 
@@ -111,7 +162,8 @@ interface UseOddsReturn {
 }
 
 /**
- * Hook for fetching and managing player prop odds from API-Sports
+ * Hook for fetching and managing player prop odds
+ * Tries The Odds API first (BetMGM/FanDuel), falls back to API-Sports (Bet365)
  */
 export function useOdds(): UseOddsReturn {
   const [isLoading, setIsLoading] = useState(false);
@@ -123,31 +175,39 @@ export function useOdds(): UseOddsReturn {
     teamName?: string,
     gameId?: number
   ): Promise<ParsedPlayerOdds | null> => {
-    const betId = STAT_TYPE_TO_BET_ID[statType];
-    if (!betId) {
-      console.warn(`No bet ID mapping for stat type: ${statType}`);
-      return null;
-    }
-
     setIsLoading(true);
     setError(null);
 
     try {
       console.log(`🎯 Fetching odds for ${playerName}, stat: ${statType}, team: ${teamName}`);
 
-      // Fetch all odds for this stat type
+      // 1. Try The Odds API first (primary source)
+      const theOddsResult = await fetchFromTheOddsApi(playerName, statType, teamName);
+      if (theOddsResult) {
+        console.log(`✅ Got odds from The Odds API for ${playerName}`);
+        return theOddsResult;
+      }
+
+      // 2. Fall back to API-Sports
+      console.log(`🔄 Falling back to API-Sports for ${playerName}`);
+      const betId = STAT_TYPE_TO_BET_ID[statType];
+      if (!betId) {
+        console.warn(`No bet ID mapping for stat type: ${statType}`);
+        return null;
+      }
+
+      // Fetch all odds for this stat type from API-Sports
       const allOdds = await fetchOddsDirect({ statType, teamName, gameId });
 
-      console.log(`🎯 Received ${allOdds.length} player odds entries`);
+      console.log(`🎯 Received ${allOdds.length} player odds entries from API-Sports`);
 
       // Find the matching player
       const playerOdds = findPlayerOdds(allOdds, playerName);
       
       if (playerOdds) {
-        console.log(`🎯 Found odds for ${playerName}:`, playerOdds);
+        console.log(`✅ Found odds from API-Sports for ${playerName}:`, playerOdds);
       } else {
-        console.log(`🎯 No odds found for ${playerName} among ${allOdds.length} entries`);
-        // Log available players for debugging
+        console.log(`❌ No odds found for ${playerName} in either API`);
         if (allOdds.length > 0) {
           console.log('Available players:', allOdds.slice(0, 10).map(o => o.playerName));
         }
