@@ -52,7 +52,7 @@ const BetSlip = () => {
   const [saveStatus, setSaveStatus] = useState<Record<string, 'idle' | 'saving' | 'saved'>>({});
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [fetchingOddsFor, setFetchingOddsFor] = useState<string | null>(null);
-  const { fetchOddsForPlayer } = useOdds();
+  const { fetchOddsForPlayer, fetchAlternateLinesForPlayer, isLoading, error, rateLimit } = useOdds();
 
   const toggleExpand = (legId: string) => {
     setExpandedLegs(prev => {
@@ -104,22 +104,82 @@ const BetSlip = () => {
     saveLegDetails(legId);
   }, [updateLegDetails, saveLegDetails]);
 
-  const toggleAdvancedMode = (legId: string) => {
+  const toggleAdvancedMode = async (legId: string) => {
     const leg = legs.find(l => l.legId === legId);
     if (!leg) return;
     
     const current = leg.details;
     const newAdvancedMode = !current.advancedMode;
     
-    if (newAdvancedMode && current.statType) {
+    // Just toggle off if disabling advanced mode
+    if (!newAdvancedMode) {
+      handleUpdateDetail(legId, 'advancedMode', false);
+      return;
+    }
+    
+    // Enabling advanced mode - fetch alternate lines
+    if (!current.statType) return;
+    
+    console.log(`🎯 Enabling Advanced Mode and fetching alternate lines for ${leg.player.name} ${current.statType}`);
+    setFetchingOddsFor(legId);
+    
+    try {
+      const alternateOdds = await fetchAlternateLinesForPlayer(leg.player.name, current.statType);
+      
+      if (alternateOdds.length > 0) {
+        // Convert and sort alternate lines
+        const altLines: AltLine[] = alternateOdds
+          .map(odds => ({
+            id: crypto.randomUUID(),
+            line: odds.line.toString(),
+            odds: odds.overOddsAmerican,
+          }))
+          .sort((a, b) => parseFloat(a.line) - parseFloat(b.line));
+        
+        // Single state update
+        updateLegDetails(legId, {
+          advancedMode: true,
+          altLines: altLines,
+        });
+        saveLegDetails(legId);
+        
+        toast({
+          title: "Alternate lines loaded",
+          description: `Found ${altLines.length} alternate lines for ${leg.player.name}`,
+        });
+      } else {
+        // No alternate lines found - use defaults
+        const defaultLines = generateDefaultLines(current.statType);
+        updateLegDetails(legId, {
+          advancedMode: true,
+          altLines: defaultLines,
+        });
+        saveLegDetails(legId);
+        
+        toast({
+          title: "No alternate lines found",
+          description: `Using default lines for ${leg.player.name} ${current.statType}`,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching alternate lines:', error);
+      
+      // Fall back to default lines
       const defaultLines = generateDefaultLines(current.statType);
       updateLegDetails(legId, {
         advancedMode: true,
         altLines: defaultLines,
       });
       saveLegDetails(legId);
-    } else {
-      handleUpdateDetail(legId, 'advancedMode', newAdvancedMode);
+      
+      toast({
+        title: "Error fetching alternate lines",
+        description: "Using default lines instead",
+        variant: "destructive",
+      });
+    } finally {
+      setFetchingOddsFor(null);
     }
   };
 
@@ -132,8 +192,8 @@ const BetSlip = () => {
     setFetchingOddsFor(legId);
 
     try {
-      // Pass team name to help find the correct game
-      const playerOdds = await fetchOddsForPlayer(leg.player.name, statType, leg.player.team);
+      // Fetch odds for the player
+      const playerOdds = await fetchOddsForPlayer(leg.player.name, statType);
 
       if (playerOdds) {
         console.log(`🎯 Found odds for ${leg.player.name}:`, playerOdds);
@@ -656,9 +716,16 @@ const BetSlip = () => {
                               size="sm"
                               className="flex-1"
                               onClick={() => toggleAdvancedMode(leg.legId)}
-                              disabled={!details.statType}
+                              disabled={!details.statType || fetchingOddsFor === leg.legId}
                             >
-                              {details.advancedMode ? 'Basic Mode' : 'Advanced Mode'}
+                              {fetchingOddsFor === leg.legId ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Loading...
+                                </>
+                              ) : (
+                                details.advancedMode ? 'Basic Mode' : 'Advanced Mode'
+                              )}
                             </Button>
                             <Button
                               size="sm"
@@ -691,6 +758,7 @@ const BetSlip = () => {
                   <span className="text-lg font-semibold">Total Legs</span>
                   <span className="text-2xl font-bold text-primary">{legs.length}</span>
                 </div>
+
                 <Button 
                   className="w-full" 
                   size="lg" 
