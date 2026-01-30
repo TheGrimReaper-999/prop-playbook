@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { fetchPlayerProps, fetchAlternateLines, findPlayerOdds, debugPlayerNameMatches, fetchAllPlayerData as fetchAllPlayerDataApi, fetchPlayerPropsByGame, fetchAlternateLinesByGame, findPlayerGame, findPlayerGameByTeam, findMatchingPlayerOdds, PlayerOdds } from '@/lib/the-odds-api';
+import { fetchPlayerProps, fetchAlternateLines, findPlayerOdds, debugPlayerNameMatches, fetchAllPlayerData as fetchAllPlayerDataApi, fetchPlayerPropsByGame, fetchAlternateLinesByGame, findPlayerGame, findPlayerGameByTeam, findMatchingPlayerOdds as findMatchingPlayerOddsApi, PlayerOdds } from '@/lib/the-odds-api';
 
 // Optimized player name normalization function
 const normalizePlayerName = (name: string): string => {
@@ -10,8 +10,8 @@ const normalizePlayerName = (name: string): string => {
     .trim();
 };
 
-// Optimized player matching function
-const findMatchingPlayerOdds = (allOdds: PlayerOdds[], playerName: string): PlayerOdds[] => {
+// Local player matching function
+const findMatchingPlayerOddsLocal = (allOdds: PlayerOdds[], playerName: string): PlayerOdds[] => {
   const normalizedSearch = normalizePlayerName(playerName);
   
   return allOdds.filter(odds => {
@@ -149,7 +149,7 @@ export function useOdds(): UseOddsReturn {
       console.log(`🎯 Received ${odds.length} alternate line entries for ${statType}`);
 
       // Find all matching player odds (alternate lines can have multiple entries per player)
-      const playerAlternateOdds = findMatchingPlayerOdds(odds, playerName);
+      const playerAlternateOdds = findMatchingPlayerOddsLocal(odds, playerName);
 
       console.log(`🎯 Found ${playerAlternateOdds.length} alternate lines for ${playerName}`);
 
@@ -277,7 +277,7 @@ export function useOdds(): UseOddsReturn {
       console.log(`🎯 Received ${odds.length} alternate line entries from game ${eventId} for ${statType}`);
 
       // Find all matching player odds
-      const playerAlternateOdds = findMatchingPlayerOdds(odds, playerName);
+      const playerAlternateOdds = findMatchingPlayerOddsLocal(odds, playerName);
 
       console.log(`🎯 Found ${playerAlternateOdds.length} alternate lines for ${playerName}`);
 
@@ -377,7 +377,7 @@ export function useOdds(): UseOddsReturn {
       console.log(`🎯 Received ${odds.length} alternate line entries from team game ${eventId} for ${statType}`);
 
       // Find all matching player odds
-      const playerAlternateOdds = findMatchingPlayerOdds(odds, playerName);
+      const playerAlternateOdds = findMatchingPlayerOddsLocal(odds, playerName);
 
       console.log(`🎯 Found ${playerAlternateOdds.length} alternate lines for ${playerName}`);
 
