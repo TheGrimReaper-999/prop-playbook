@@ -142,7 +142,7 @@ function parsePlayerOdds(bookmakers: TheOddsApiBookmaker[], marketKey: string): 
   return playerOdds;
 }
 
-async function fetchWithFallback(url: string, primaryKey: string, backupKey: string | null): Promise<Response> {
+async function fetchWithFallback(url: string, primaryKey: string, backupKey: string | null, tertiaryKey: string | null): Promise<Response> {
   // Try primary key first
   const primaryUrl = url.replace('API_KEY_PLACEHOLDER', primaryKey);
   console.log(`🔑 Trying primary API key...`);
@@ -159,16 +159,29 @@ async function fetchWithFallback(url: string, primaryKey: string, backupKey: str
       console.log(`✅ Backup key succeeded!`);
     } else {
       console.log(`❌ Backup key also failed (${response.status})`);
+      
+      // If backup also fails, try tertiary key
+      if (tertiaryKey && (response.status === 401 || response.status === 429 || response.status === 403)) {
+        console.log(`⚠️ Backup key failed (${response.status}), trying tertiary key...`);
+        const tertiaryUrl = url.replace('API_KEY_PLACEHOLDER', tertiaryKey);
+        response = await fetch(tertiaryUrl);
+        
+        if (response.ok) {
+          console.log(`✅ Tertiary key succeeded!`);
+        } else {
+          console.log(`❌ Tertiary key also failed (${response.status})`);
+        }
+      }
     }
   }
   
   return response;
 }
 
-async function getTodayNBAEvents(primaryKey: string, backupKey: string | null): Promise<TheOddsApiEvent[]> {
+async function getTodayNBAEvents(primaryKey: string, backupKey: string | null, tertiaryKey: string | null): Promise<TheOddsApiEvent[]> {
   const eventsUrl = `${API_BASE}/v4/sports/basketball_nba/events?apiKey=API_KEY_PLACEHOLDER`;
   
-  const response = await fetchWithFallback(eventsUrl, primaryKey, backupKey);
+  const response = await fetchWithFallback(eventsUrl, primaryKey, backupKey, tertiaryKey);
   
   if (!response.ok) {
     const errorText = await response.text();
@@ -191,11 +204,12 @@ async function fetchGameOdds(
   eventId: string, 
   marketKey: string,
   primaryKey: string,
-  backupKey: string | null
+  backupKey: string | null,
+  tertiaryKey: string | null
 ): Promise<PlayerOdds[]> {
   const oddsUrl = `${API_BASE}/v4/sports/basketball_nba/events/${eventId}/odds?apiKey=API_KEY_PLACEHOLDER&regions=us&bookmakers=betmgm,fanduel,draftkings&markets=${marketKey}&oddsFormat=american`;
   
-  const response = await fetchWithFallback(oddsUrl, primaryKey, backupKey);
+  const response = await fetchWithFallback(oddsUrl, primaryKey, backupKey, tertiaryKey);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -219,6 +233,7 @@ serve(async (req) => {
   try {
     const primaryKey = Deno.env.get('THE_ODDS_API_KEY');
     const backupKey = Deno.env.get('THE_ODDS_API_KEY_BACKUP') ?? null;
+    const tertiaryKey = Deno.env.get('THE_ODDS_API_KEY_TERTIARY') ?? null;
     
     if (!primaryKey) {
       throw new Error('THE_ODDS_API_KEY not configured');
@@ -226,6 +241,7 @@ serve(async (req) => {
 
     const primaryKeyStr = primaryKey;
     const backupKeyStr = backupKey;
+    const tertiaryKeyStr = tertiaryKey;
 
     const url = new URL(req.url);
     const action = url.searchParams.get('action') || 'props';
@@ -248,7 +264,7 @@ serve(async (req) => {
 
     if (action === 'events') {
       // Just return events
-      const events = await getTodayNBAEvents(primaryKeyStr, backupKeyStr);
+      const events = await getTodayNBAEvents(primaryKeyStr, backupKeyStr, tertiaryKeyStr);
       return new Response(JSON.stringify({ events }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -256,10 +272,10 @@ serve(async (req) => {
 
     if (eventId) {
       // Fetch odds for specific event
-      allPlayerOdds = await fetchGameOdds(eventId, marketKey, primaryKeyStr, backupKeyStr);
+      allPlayerOdds = await fetchGameOdds(eventId, marketKey, primaryKeyStr, backupKeyStr, tertiaryKeyStr);
     } else {
       // Fetch odds for all today's events
-      const events = await getTodayNBAEvents(primaryKeyStr, backupKeyStr);
+      const events = await getTodayNBAEvents(primaryKeyStr, backupKeyStr, tertiaryKeyStr);
       
       if (events.length === 0) {
         console.log('No NBA games found for today');
@@ -270,7 +286,7 @@ serve(async (req) => {
 
       for (const event of events) {
         try {
-          const odds = await fetchGameOdds(event.id, marketKey, primaryKeyStr, backupKeyStr);
+          const odds = await fetchGameOdds(event.id, marketKey, primaryKeyStr, backupKeyStr, tertiaryKeyStr);
           allPlayerOdds = allPlayerOdds.concat(odds);
         } catch (error) {
           console.error(`Failed to fetch odds for event ${event.id}:`, error);
