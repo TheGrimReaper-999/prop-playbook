@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { BetSlipProvider } from "@/contexts/BetSlipContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import Index from "./pages/Index";
 import PlayerProfile from "./pages/PlayerProfile";
 import TeamProfile from "./pages/TeamProfile";
@@ -23,33 +24,35 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <BetSlipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/player/:id" element={<PlayerProfile />} />
-            <Route path="/player/api/:id" element={<PlayerProfile />} />
-            <Route path="/team/:id" element={<TeamProfile />} />
-            <Route path="/betslip" element={<BetSlip />} />
-            <Route path="/decisions" element={<Decisions />} />
-            <Route path="/parlays" element={<Parlays />} />
-            <Route path="/leaderboard" element={<Leaderboard />} />
-            <Route path="/import" element={<ImportData />} />
-            <Route path="/matchup/:eventId" element={<Matchup />} />
-            <Route path="/privacy" element={<PrivacyPolicy />} />
-            <Route path="/terms" element={<TermsOfService />} />
-            <Route path="/contact" element={<Contact />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </BetSlipProvider>
-    </TooltipProvider>
+    <ThemeProvider>
+      <TooltipProvider>
+        <BetSlipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/player/:id" element={<PlayerProfile />} />
+              <Route path="/player/api/:id" element={<PlayerProfile />} />
+              <Route path="/team/:id" element={<TeamProfile />} />
+              <Route path="/betslip" element={<BetSlip />} />
+              <Route path="/decisions" element={<Decisions />} />
+              <Route path="/parlays" element={<Parlays />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/import" element={<ImportData />} />
+              <Route path="/matchup/:eventId" element={<Matchup />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="/contact" element={<Contact />} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </BetSlipProvider>
+      </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

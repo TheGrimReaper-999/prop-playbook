@@ -3,13 +3,15 @@ import BetSlipOverlay from '@/components/BetSlipOverlay';
 import Footer from '@/components/Footer';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
+import { useTheme } from '@/contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
-import { LogIn, User, Layers } from 'lucide-react';
+import { LogIn, User, Layers, Moon, Sun } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Index = () => {
   const { user, loading } = useAuth();
   const { profile } = useProfile();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   return (
@@ -33,6 +35,22 @@ const Index = () => {
 
         {/* Right side - Auth buttons */}
         <div className="flex items-center gap-2">
+          {/* Theme Toggle */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleTheme}
+            className="bg-card/80 backdrop-blur-sm border-border/50 gap-2"
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4" />
+            ) : (
+              <Moon className="w-4 h-4" />
+            )}
+            <span className="hidden sm:inline">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+          </Button>
+
           {!loading && (
             user ? (
               <Button

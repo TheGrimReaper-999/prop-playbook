@@ -22,7 +22,7 @@ const HeroSection = () => {
     <section className="relative flex flex-col items-center justify-start pt-20 sm:pt-24 px-4 sm:px-6 pb-8 overflow-hidden">
       {/* Background gradient overlay */}
       <div 
-        className="absolute inset-0 z-0"
+        className="fixed inset-0 z-0 pointer-events-none"
         style={{ background: 'var(--gradient-hero)' }}
       />
       

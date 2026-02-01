@@ -138,21 +138,21 @@ const TodayFixtures = () => {
   const getStatusBadge = (game: ScheduleGame) => {
     if (game.status === 'in') {
       return (
-        <span className="px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 animate-pulse">
+        <span className="px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 animate-pulse font-extrabold text-xs">
           LIVE
         </span>
       );
     }
     if (game.status === 'post' || game.completed) {
       return (
-        <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+        <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-extrabold text-xs">
           {game.statusDetail || 'Final'}
         </span>
       );
     }
     // Scheduled game - show UTC time
     return (
-      <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary">
+      <span className="px-2 py-0.5 rounded-full bg-primary/20 text-primary font-extrabold text-xs">
         {formatGameTime(game.date)}
       </span>
     );
@@ -161,71 +161,77 @@ const TodayFixtures = () => {
   return (
     <div className="w-full max-w-4xl mx-auto mt-6 sm:mt-8 px-0 sm:px-4">
       {/* Date Navigation */}
-      <div className="flex items-center justify-center gap-1 sm:gap-2 mb-4 flex-wrap">
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={goToPreviousDay}
-          className="hover:bg-muted h-8 w-8 sm:h-10 sm:w-10"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </Button>
-        
-        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "flex items-center gap-1 sm:gap-2 hover:bg-muted px-2 sm:px-4",
-                !isToday && "text-primary"
-              )}
-            >
-              <CalendarIcon className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
-              <h2 className="text-sm sm:text-lg font-semibold">{getDateLabel()}</h2>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="center">
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={handleDateSelect}
-              initialFocus
-              className={cn("p-3 pointer-events-auto")}
-            />
-          </PopoverContent>
-        </Popover>
-        
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={goToNextDay}
-          className="hover:bg-muted h-8 w-8 sm:h-10 sm:w-10"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </Button>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        {/* Today Button - left side */}
+        {!isToday && (
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={goToToday}
+          >
+            Back to Today
+          </Button>
+        )}
+        {isToday && <div className="w-[100px]" />}
 
-        {/* Sync Button */}
+        {/* Center navigation controls */}
+        <div className="flex items-center gap-1 sm:gap-2">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={goToPreviousDay}
+            className="hover:bg-muted h-8 w-8 sm:h-10 sm:w-10"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "flex items-center gap-1 sm:gap-2 hover:bg-muted px-2 sm:px-4",
+                  !isToday && "text-primary"
+                )}
+              >
+                <CalendarIcon className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+                <h2 className="text-sm sm:text-lg font-semibold">{getDateLabel()}</h2>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="center">
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={handleDateSelect}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+          
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={goToNextDay}
+            className="hover:bg-muted h-8 w-8 sm:h-10 sm:w-10"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* Sync Button - right side */}
         <Button
           variant="ghost"
           size="icon"
           onClick={handleManualSync}
           disabled={isSyncing}
-          className="hover:bg-muted ml-1 sm:ml-2 h-8 w-8 sm:h-10 sm:w-10"
+          className="hover:bg-muted h-8 w-8 sm:h-10 sm:w-10"
           title="Sync database with latest game data"
         >
           <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
         </Button>
       </div>
-
-      {/* Today Button */}
-      {!isToday && (
-        <div className="flex justify-center mb-4">
-          <Button variant="outline" size="sm" onClick={goToToday}>
-            Back to Today
-          </Button>
-        </div>
-      )}
 
       {/* Games Grid */}
       {error || !games || games.length === 0 ? (
@@ -259,7 +265,7 @@ const TodayFixtures = () => {
                         className="w-8 h-8 sm:w-10 sm:h-10 mx-auto mb-1 object-contain"
                       />
                     )}
-                    <p className={`text-xs sm:text-sm font-bold truncate ${game.awayTeam.winner ? 'text-primary' : ''}`}>
+                    <p className={`text-xs sm:text-sm font-extrabold truncate ${game.awayTeam.winner ? 'text-primary' : ''}`}>
                       {game.awayTeam.abbreviation}
                     </p>
                     {/* Only show score if game has started (in progress or completed) */}
@@ -271,7 +277,7 @@ const TodayFixtures = () => {
                   </div>
 
                   {/* VS / @ */}
-                  <div className="text-muted-foreground text-sm font-medium">
+                  <div className="text-muted-foreground text-sm font-semibold">
                     {game.status === 'pre' ? '@' : 'vs'}
                   </div>
 
@@ -284,7 +290,7 @@ const TodayFixtures = () => {
                         className="w-8 h-8 sm:w-10 sm:h-10 mx-auto mb-1 object-contain"
                       />
                     )}
-                    <p className={`text-xs sm:text-sm font-bold truncate ${game.homeTeam.winner ? 'text-primary' : ''}`}>
+                    <p className={`text-xs sm:text-sm font-extrabold truncate ${game.homeTeam.winner ? 'text-primary' : ''}`}>
                       {game.homeTeam.abbreviation}
                     </p>
                     {/* Only show score if game has started (in progress or completed) */}
