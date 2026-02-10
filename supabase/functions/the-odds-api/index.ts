@@ -70,6 +70,24 @@ interface TheOddsApiGameWithOdds extends TheOddsApiEvent {
   bookmakers: TheOddsApiBookmaker[];
 }
 
+// Collect all available API keys
+function getAllApiKeys(): string[] {
+  const keyNames = [
+    'THE_ODDS_API_KEY',
+    'THE_ODDS_API_KEY_BACKUP',
+    'THE_ODDS_API_KEY_TERTIARY',
+    'THE_ODDS_API_KEY_4',
+    'THE_ODDS_API_KEY_5',
+    'THE_ODDS_API_KEY_6',
+  ];
+  const keys: string[] = [];
+  for (const name of keyNames) {
+    const val = Deno.env.get(name);
+    if (val) keys.push(val);
+  }
+  return keys;
+}
+
 function americanToDecimal(american: number): number {
   if (american > 0) {
     return (american / 100) + 1;
@@ -85,7 +103,6 @@ function formatAmerican(american: number): string {
 function parsePlayerOdds(bookmakers: TheOddsApiBookmaker[], marketKey: string): PlayerOdds[] {
   const playerOdds: PlayerOdds[] = [];
   
-  // Prefer BetMGM, then FanDuel, then DraftKings
   const bookmaker = bookmakers?.find(b => b.key === 'betmgm') 
     || bookmakers?.find(b => b.key === 'fanduel')
     || bookmakers?.find(b => b.key === 'draftkings')
@@ -142,52 +159,49 @@ function parsePlayerOdds(bookmakers: TheOddsApiBookmaker[], marketKey: string): 
   return playerOdds;
 }
 
-async function fetchWithFallback(url: string, primaryKey: string, backupKey: string | null, tertiaryKey: string | null): Promise<Response> {
-  // Try primary key first
-  const primaryUrl = url.replace('API_KEY_PLACEHOLDER', primaryKey);
-  console.log(`🔑 Trying primary API key...`);
+/**
+ * Fetch a URL trying all available API keys in sequence.
+ * Returns the first successful response, or throws if all keys fail.
+ */
+async function fetchWithAllKeys(urlTemplate: string, keys: string[]): Promise<Response> {
+  let lastError = '';
   
-  let response = await fetch(primaryUrl);
-  
-  // If primary fails with auth/rate limit error and we have a backup, try backup
-  if (!response.ok && backupKey && (response.status === 401 || response.status === 429 || response.status === 403)) {
-    console.log(`⚠️ Primary key failed (${response.status}), trying backup key...`);
-    const backupUrl = url.replace('API_KEY_PLACEHOLDER', backupKey);
-    response = await fetch(backupUrl);
+  for (let i = 0; i < keys.length; i++) {
+    const url = urlTemplate.replace('API_KEY_PLACEHOLDER', keys[i]);
+    console.log(`🔑 Trying key ${i + 1}/${keys.length}...`);
     
-    if (response.ok) {
-      console.log(`✅ Backup key succeeded!`);
-    } else {
-      console.log(`❌ Backup key also failed (${response.status})`);
+    try {
+      const response = await fetch(url);
       
-      // If backup also fails, try tertiary key
-      if (tertiaryKey && (response.status === 401 || response.status === 429 || response.status === 403)) {
-        console.log(`⚠️ Backup key failed (${response.status}), trying tertiary key...`);
-        const tertiaryUrl = url.replace('API_KEY_PLACEHOLDER', tertiaryKey);
-        response = await fetch(tertiaryUrl);
-        
-        if (response.ok) {
-          console.log(`✅ Tertiary key succeeded!`);
-        } else {
-          console.log(`❌ Tertiary key also failed (${response.status})`);
-        }
+      if (response.ok) {
+        console.log(`✅ Key ${i + 1} succeeded`);
+        return response;
       }
+      
+      const errorText = await response.text();
+      lastError = `Key ${i + 1}: ${response.status} - ${errorText}`;
+      console.log(`⚠️ Key ${i + 1} failed (${response.status})`);
+      
+      // Only rotate on auth/rate-limit errors; other errors likely affect all keys
+      if (response.status !== 401 && response.status !== 403 && response.status !== 429) {
+        throw new Error(`API error: ${response.status} - ${errorText}`);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('API error:')) {
+        throw err;
+      }
+      lastError = `Key ${i + 1}: ${err instanceof Error ? err.message : 'Network error'}`;
+      console.log(`⚠️ Key ${i + 1} network error`);
     }
   }
   
-  return response;
+  throw new Error(`All ${keys.length} API keys exhausted. Last error: ${lastError}`);
 }
 
-async function getTodayNBAEvents(primaryKey: string, backupKey: string | null, tertiaryKey: string | null): Promise<TheOddsApiEvent[]> {
+async function getTodayNBAEvents(keys: string[]): Promise<TheOddsApiEvent[]> {
   const eventsUrl = `${API_BASE}/v4/sports/basketball_nba/events?apiKey=API_KEY_PLACEHOLDER`;
   
-  const response = await fetchWithFallback(eventsUrl, primaryKey, backupKey, tertiaryKey);
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Events API error: ${response.status} - ${errorText}`);
-  }
-
+  const response = await fetchWithAllKeys(eventsUrl, keys);
   const events: TheOddsApiEvent[] = await response.json();
   
   // Filter events for next 24 hours
@@ -203,19 +217,11 @@ async function getTodayNBAEvents(primaryKey: string, backupKey: string | null, t
 async function fetchGameOdds(
   eventId: string, 
   marketKey: string,
-  primaryKey: string,
-  backupKey: string | null,
-  tertiaryKey: string | null
+  keys: string[]
 ): Promise<PlayerOdds[]> {
   const oddsUrl = `${API_BASE}/v4/sports/basketball_nba/events/${eventId}/odds?apiKey=API_KEY_PLACEHOLDER&regions=us&bookmakers=betmgm,fanduel,draftkings&markets=${marketKey}&oddsFormat=american`;
   
-  const response = await fetchWithFallback(oddsUrl, primaryKey, backupKey, tertiaryKey);
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Odds API error: ${response.status} - ${errorText}`);
-  }
-
+  const response = await fetchWithAllKeys(oddsUrl, keys);
   const gameWithOdds: TheOddsApiGameWithOdds = await response.json();
   
   if (!gameWithOdds.bookmakers?.length) {
@@ -231,17 +237,13 @@ serve(async (req) => {
   }
 
   try {
-    const primaryKey = Deno.env.get('THE_ODDS_API_KEY');
-    const backupKey = Deno.env.get('THE_ODDS_API_KEY_BACKUP') ?? null;
-    const tertiaryKey = Deno.env.get('THE_ODDS_API_KEY_TERTIARY') ?? null;
+    const keys = getAllApiKeys();
     
-    if (!primaryKey) {
-      throw new Error('THE_ODDS_API_KEY not configured');
+    if (keys.length === 0) {
+      throw new Error('No API keys configured');
     }
-
-    const primaryKeyStr = primaryKey;
-    const backupKeyStr = backupKey;
-    const tertiaryKeyStr = tertiaryKey;
+    
+    console.log(`🔑 ${keys.length} API keys available for rotation`);
 
     const url = new URL(req.url);
     const action = url.searchParams.get('action') || 'props';
@@ -263,19 +265,16 @@ serve(async (req) => {
     let allPlayerOdds: PlayerOdds[] = [];
 
     if (action === 'events') {
-      // Just return events
-      const events = await getTodayNBAEvents(primaryKeyStr, backupKeyStr, tertiaryKeyStr);
+      const events = await getTodayNBAEvents(keys);
       return new Response(JSON.stringify({ events }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (eventId) {
-      // Fetch odds for specific event
-      allPlayerOdds = await fetchGameOdds(eventId, marketKey, primaryKeyStr, backupKeyStr, tertiaryKeyStr);
+      allPlayerOdds = await fetchGameOdds(eventId, marketKey, keys);
     } else {
-      // Fetch odds for all today's events
-      const events = await getTodayNBAEvents(primaryKeyStr, backupKeyStr, tertiaryKeyStr);
+      const events = await getTodayNBAEvents(keys);
       
       if (events.length === 0) {
         console.log('No NBA games found for today');
@@ -286,7 +285,7 @@ serve(async (req) => {
 
       for (const event of events) {
         try {
-          const odds = await fetchGameOdds(event.id, marketKey, primaryKeyStr, backupKeyStr, tertiaryKeyStr);
+          const odds = await fetchGameOdds(event.id, marketKey, keys);
           allPlayerOdds = allPlayerOdds.concat(odds);
         } catch (error) {
           console.error(`Failed to fetch odds for event ${event.id}:`, error);
