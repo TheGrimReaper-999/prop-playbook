@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.process-prediction-feedback]
 verify_jwt = false
+
+[functions.the-odds-api]
+verify_jwt = false
