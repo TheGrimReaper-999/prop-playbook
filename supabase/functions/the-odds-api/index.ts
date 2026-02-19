@@ -79,6 +79,7 @@ function getAllApiKeys(): string[] {
     'THE_ODDS_API_KEY_4',
     'THE_ODDS_API_KEY_5',
     'THE_ODDS_API_KEY_6',
+    'THE_ODDS_API_KEY_7',
   ];
   const keys: string[] = [];
   for (const name of keyNames) {
