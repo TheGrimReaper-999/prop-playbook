@@ -173,12 +173,21 @@ export const fetchPlayerStatsFromDb = async (
     teamName = player?.team_name || '';
   }
 
-  const { data: stats, error } = await supabase
+  // Fetch more than 10 to account for filtered All-Star games
+  const { data: rawStats, error } = await supabase
     .from('nba_player_stats')
     .select('*')
     .eq('player_id', dbPlayerId)
     .order('game_date', { ascending: false })
-    .limit(10);
+    .limit(20);
+
+  // Filter out NBA All-Star break games (Feb 13-18, 2025)
+  const ALL_STAR_START = new Date('2025-02-13T00:00:00Z').getTime();
+  const ALL_STAR_END = new Date('2025-02-19T00:00:00Z').getTime();
+  const stats = (rawStats || []).filter(s => {
+    const d = new Date(s.game_date).getTime();
+    return d < ALL_STAR_START || d >= ALL_STAR_END;
+  }).slice(0, 10);
 
   if (error) {
     console.error('Error fetching stats from DB:', error);
