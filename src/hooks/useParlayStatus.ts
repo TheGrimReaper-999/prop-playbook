@@ -99,18 +99,44 @@ const fetchParlayStatuses = async (parlays: SavedParlay[]): Promise<Map<string, 
     return results;
   }
 
-  // 4. Batch fetch all stats for all players since earliest parlay
-  const { data: allStats } = await supabase
-    .from('nba_player_stats')
-    .select('*')
-    .in('player_id', playerIds)
-    .gte('game_date', earliestDate)
-    .order('game_date', { ascending: true });
-
-  // 5. Get unique event_ids from stats AND from leg eventIds (for future games)
-  const statsEventIds = (allStats || []).map(s => s.event_id);
+  // 4. Collect all event IDs from parlay legs first (most precise approach)
   const legEventIds = allLegs.map(l => l.eventId).filter(Boolean) as string[];
-  const allEventIds = [...new Set([...statsEventIds, ...legEventIds])];
+  const allEventIds = [...new Set(legEventIds)];
+
+  // 5. Batch fetch stats only for the specific events in parlays (avoids 1000-row limit)
+  let allStats: any[] = [];
+  if (allEventIds.length > 0) {
+    // Fetch in batches of 100 event IDs to avoid query limits
+    for (let i = 0; i < allEventIds.length; i += 100) {
+      const batch = allEventIds.slice(i, i + 100);
+      const { data: batchStats } = await supabase
+        .from('nba_player_stats')
+        .select('*')
+        .in('player_id', playerIds)
+        .in('event_id', batch)
+        .order('game_date', { ascending: true });
+      if (batchStats) allStats.push(...batchStats);
+    }
+  }
+
+  // Also fetch fallback stats for legs without eventId (old parlays)
+  const legsWithoutEventId = allLegs.filter(l => !l.eventId);
+  if (legsWithoutEventId.length > 0) {
+    const { data: fallbackStats } = await supabase
+      .from('nba_player_stats')
+      .select('*')
+      .in('player_id', playerIds)
+      .gte('game_date', earliestDate)
+      .order('game_date', { ascending: true })
+      .limit(2000);
+    if (fallbackStats) {
+      // Merge without duplicates
+      const existingIds = new Set(allStats.map(s => s.id));
+      fallbackStats.forEach(s => { if (!existingIds.has(s.id)) allStats.push(s); });
+    }
+    // Add event IDs from fallback stats
+    fallbackStats?.forEach(s => { if (!allEventIds.includes(s.event_id)) allEventIds.push(s.event_id); });
+  }
   
   // Batch fetch fixture statuses with team info and game date
   const { data: fixtures } = await supabase
