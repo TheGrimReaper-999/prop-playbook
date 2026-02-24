@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, User, Receipt, ChevronDown, ChevronUp, Plus, X, Check, Copy, Loader2 } from 'lucide-react';
+import { ArrowLeft, Trash2, User, Receipt, ChevronDown, ChevronUp, Plus, X, Check, Copy, Loader2, LogIn } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -48,6 +49,7 @@ const COMBO_STATS = ['pra', 'pr', 'pa', 'ra'];
 const BetSlip = () => {
   const navigate = useNavigate();
   const { legs, removeLeg, duplicateLeg, updateLegDetails, clearSlip, setLegStats } = useBetSlip();
+  const { user, loading: authLoading } = useAuth();
   const [expandedLegs, setExpandedLegs] = useState<Set<string>>(new Set());
   const [saveStatus, setSaveStatus] = useState<Record<string, 'idle' | 'saving' | 'saved'>>({});
   const [isLoadingStats, setIsLoadingStats] = useState(false);
@@ -385,6 +387,48 @@ const BetSlip = () => {
       setIsLoadingStats(false);
     }
   };
+
+  // Auth guard - show sign-in prompt if not logged in
+  if (!authLoading && !user) {
+    return (
+      <main className="min-h-screen bg-background">
+        <div className="bg-gradient-to-b from-primary/20 to-background p-6">
+          <div className="max-w-4xl mx-auto">
+            <Button variant="ghost" onClick={() => navigate('/')} className="mb-6 hover:bg-primary/10">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Home
+            </Button>
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-xl bg-primary/20 flex items-center justify-center">
+                <Receipt className="w-8 h-8 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-4xl font-black tracking-tight">BetSlip</h1>
+                <p className="text-muted-foreground">Sign in to build and save your bet slips</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="max-w-4xl mx-auto p-6">
+          <Card className="bg-card/50 border-border/50">
+            <CardContent className="p-12 text-center">
+              <div className="w-20 h-20 rounded-full bg-primary/20 mx-auto mb-4 flex items-center justify-center">
+                <LogIn className="w-10 h-10 text-primary" />
+              </div>
+              <h2 className="text-xl font-semibold mb-2">Sign in required</h2>
+              <p className="text-muted-foreground mb-6">
+                Create an account or sign in to build and save your bet slips
+              </p>
+              <Button onClick={() => navigate('/auth')} size="lg">
+                <LogIn className="w-4 h-4 mr-2" />
+                Sign In / Sign Up
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-background">
